@@ -34,6 +34,7 @@ interface DiaryPart {
   hr_employee_id: number;
   hr_employee_name: string;
   state: string;
+  observation?: string;
   employee_lines_ids: EmployeeLine[];
 }
 
@@ -228,7 +229,16 @@ class ApiService {
     }
   }
 
-  async saveDiaryParts(url: string, username: string, password: string, diaryPart: DiaryPart, pcpData: {[key: string]: number}): Promise<{status: 'ok' | 'error', message?: string}> {
+  async saveDiaryParts(
+    url: string, 
+    username: string, 
+    password: string, 
+    diaryPart: DiaryPart, 
+    pcpData: {[key: string]: number}, 
+    observations: {[partId: number]: string},
+    fileData?: {name: string, data: string},
+    inasistencias?: {[employeeId: number]: boolean}
+  ): Promise<{status: 'ok' | 'error', message?: string}> {
     // Verificar que estamos en el cliente
     if (typeof window === 'undefined') {
       return {
@@ -260,6 +270,7 @@ class ApiService {
         bim_resource_id: number | false;
         bim_pcp_id: number | false;
         hh: number;
+        i: boolean;
       }> = [];
 
       // Obtener todos los PCP únicos
@@ -304,7 +315,8 @@ class ApiService {
                 hr_employee_id: employee.hr_employee_id as number,
                 bim_resource_id: originalLine.bim_resource_id,
                 bim_pcp_id: originalLine.bim_pcp_id,
-                hh: value
+                hh: value,
+                i: inasistencias?.[employee.hr_employee_id as number] || false
               });
             }
           }
@@ -312,10 +324,27 @@ class ApiService {
       });
 
       // Preparar los datos del parte diario
-      const diaryPartData = {
+      const diaryPartData: {
+        id: number;
+        observation: string;
+        employee_lines_ids: Array<{
+          hr_employee_id: number;
+          bim_resource_id: number | false;
+          bim_pcp_id: number | false;
+          hh: number;
+          i: boolean;
+        }>;
+        file?: {name: string, data: string};
+      } = {
         id: diaryPart.id,
+        observation: observations[diaryPart.id] || '',
         employee_lines_ids: employeeLines
       };
+
+      // Agregar archivo si existe
+      if (fileData) {
+        diaryPartData.file = fileData;
+      }
 
       console.log('Final diary part data:', {
         id: diaryPartData.id,

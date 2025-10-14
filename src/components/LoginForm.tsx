@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, Globe, User, Lock, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, Globe, User, Lock, CheckCircle, QrCode, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import QRCode from 'react-qr-code';
 
 interface LoginFormData {
   url: string;
@@ -18,6 +19,7 @@ export default function LoginForm() {
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
   const [successMessage, setSuccessMessage] = useState<string>('');
 
@@ -226,6 +228,44 @@ export default function LoginForm() {
               )}
             </button>
           </form>
+
+          {/* QR Code Toggle Button */}
+          {formData.url && isValidUrl(formData.url) && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowQR(!showQR)}
+                className="w-full flex items-center justify-center py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <QrCode className="h-4 w-4 mr-2" />
+                <span>Código QR para acceso móvil</span>
+                {showQR ? (
+                  <ChevronUp className="h-4 w-4 ml-2" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                )}
+              </button>
+              
+              {/* QR Code Section */}
+              {showQR && (
+                <div className="mt-3 p-4 bg-gray-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="bg-white p-3 rounded-lg inline-block">
+                      <QRCode 
+                        value={formData.url} 
+                        size={120}
+                        style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                        viewBox={`0 0 120 120`}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Escanea para abrir en móvil
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Footer */}
           <div className="mt-6 text-center">
