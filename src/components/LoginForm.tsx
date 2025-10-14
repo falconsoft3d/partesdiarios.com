@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Eye, EyeOff, Globe, User, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Eye, EyeOff, Globe, User, Lock, CheckCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface LoginFormData {
   url: string;
@@ -10,14 +11,22 @@ interface LoginFormData {
 }
 
 export default function LoginForm() {
+  const { login, isLoading, error, clearError } = useAuth();
   const [formData, setFormData] = useState<LoginFormData>({
-    url: '',
+    url: 'http://localhost:8069',
     username: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
+  const [successMessage, setSuccessMessage] = useState<string>('');
+
+  // Limpiar error global cuando cambie algún campo
+  useEffect(() => {
+    if (error) {
+      clearError();
+    }
+  }, [formData, error, clearError]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<LoginFormData> = {};
@@ -58,21 +67,20 @@ export default function LoginForm() {
       return;
     }
 
-    setIsLoading(true);
+    setSuccessMessage('');
     
     try {
-      // Aquí puedes agregar la lógica de autenticación
-      console.log('Datos del formulario:', formData);
+      const result = await login(formData.url, formData.username, formData.password);
       
-      // Simular una llamada a API
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      alert('¡Conexión exitosa!');
+      if (result.success) {
+        setSuccessMessage('¡Conexión exitosa! Redirigiendo...');
+        // Aquí podrías redirigir al dashboard
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1500);
+      }
     } catch (error) {
-      console.error('Error en la autenticación:', error);
-      alert('Error en la conexión. Intenta nuevamente.');
-    } finally {
-      setIsLoading(false);
+      console.error('Error en login:', error);
     }
   };
 
@@ -102,6 +110,20 @@ export default function LoginForm() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Error global */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
+            {/* Mensaje de éxito */}
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center">
+                <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                <p className="text-sm text-green-600">{successMessage}</p>
+              </div>
+            )}
             {/* URL Field */}
             <div>
               <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
