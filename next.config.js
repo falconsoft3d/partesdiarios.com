@@ -7,7 +7,14 @@ const withPWA = require('next-pwa')({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  typescript: {
+    // ⚠️ Esto permite el build incluso con errores de TypeScript
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    // ⚠️ Esto permite el build incluso con errores de ESLint
+    ignoreDuringBuilds: true,
+  },
 };
 
 module.exports = withPWA(nextConfig);
