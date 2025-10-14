@@ -21,6 +21,11 @@ class StorageService {
   }
 
   saveConnection(url: string, username: string, password: string): boolean {
+    // Solo funciona en el cliente
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
     try {
       const connectionData: ConnectionData = {
         url,
@@ -41,6 +46,11 @@ class StorageService {
   }
 
   getConnection(): ConnectionData | null {
+    // Solo funciona en el cliente
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
     try {
       const encryptedData = localStorage.getItem(this.STORAGE_KEY);
       if (!encryptedData) {
@@ -60,6 +70,11 @@ class StorageService {
   }
 
   clearConnection(): boolean {
+    // Solo funciona en el cliente
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
     try {
       localStorage.removeItem(this.STORAGE_KEY);
       return true;

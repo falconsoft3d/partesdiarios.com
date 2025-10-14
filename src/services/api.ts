@@ -43,6 +43,14 @@ class ApiService {
   }
 
   async login(url: string, username: string, password: string): Promise<LoginResponse> {
+    // Verificar que estamos en el cliente
+    if (typeof window === 'undefined') {
+      return {
+        success: false,
+        message: 'Esta función solo puede ejecutarse en el navegador'
+      };
+    }
+
     try {
       // Validar URL antes del fetch
       const urlValidation = this.validateUrl(url);
@@ -57,19 +65,28 @@ class ApiService {
       const cleanUrl = url.replace(/\/$/, '');
       const endpoint = `${cleanUrl}/bim/diary-part-offline/pwa/load-part`;
       
-      const response = await fetch(endpoint, {
+      // Crear configuración del fetch
+      const fetchConfig: RequestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
-        mode: 'cors', // Explícitamente permitir CORS
-        credentials: 'omit', // No enviar cookies por defecto
         body: JSON.stringify({
           login: username,
           password: password
         })
-      });
+      };
+
+      // Solo agregar configuraciones específicas del navegador si estamos en el cliente
+      if (typeof window !== 'undefined') {
+        fetchConfig.mode = 'cors';
+        fetchConfig.credentials = 'omit';
+        if (fetchConfig.headers) {
+          (fetchConfig.headers as Record<string, string>)['Accept'] = 'application/json';
+        }
+      }
+      
+      const response = await fetch(endpoint, fetchConfig);
 
       if (!response.ok) {
         throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
@@ -110,11 +127,22 @@ class ApiService {
   }
 
   async testConnection(url: string): Promise<boolean> {
+    // Solo funciona en el cliente
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
     try {
-      await fetch(url, {
+      const fetchConfig: RequestInit = {
         method: 'GET',
-        mode: 'no-cors' // Para evitar problemas de CORS en test
-      });
+      };
+
+      // Solo agregar mode en el navegador
+      if (typeof window !== 'undefined') {
+        fetchConfig.mode = 'no-cors';
+      }
+
+      await fetch(url, fetchConfig);
       return true;
     } catch {
       return false;

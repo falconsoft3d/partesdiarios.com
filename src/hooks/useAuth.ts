@@ -21,7 +21,12 @@ export function useAuth() {
 
   // Verificar autenticación al cargar
   useEffect(() => {
-    checkAuth();
+    // Solo ejecutar en el cliente
+    if (typeof window !== 'undefined') {
+      checkAuth();
+    } else {
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+    }
   }, []);
 
   const checkAuth = () => {
