@@ -61,60 +61,41 @@ class ApiService {
         };
       }
 
-      // Limpiar URL y construir endpoint
-      const cleanUrl = url.replace(/\/$/, '');
-      const endpoint = `${cleanUrl}/bim/diary-part-offline/pwa/load-part`;
+      // Usar nuestro proxy API para evitar CORS
+      const proxyEndpoint = '/api/login';
       
-      // Crear configuración del fetch
-      const fetchConfig: RequestInit = {
+      const response = await fetch(proxyEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          url: url,
           login: username,
           password: password
         })
-      };
-
-      // Solo agregar configuraciones específicas del navegador si estamos en el cliente
-      if (typeof window !== 'undefined') {
-        fetchConfig.mode = 'cors';
-        fetchConfig.credentials = 'omit';
-        if (fetchConfig.headers) {
-          (fetchConfig.headers as Record<string, string>)['Accept'] = 'application/json';
-        }
-      }
-      
-      const response = await fetch(endpoint, fetchConfig);
+      });
 
       if (!response.ok) {
-        throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+        const errorData = await response.json().catch(() => null);
+        const errorMessage = errorData?.message || `Error HTTP: ${response.status}`;
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      const result = await response.json();
       
-      return {
-        success: true,
-        data: data,
-        message: 'Login exitoso'
-      };
+      // El proxy ya devuelve el formato correcto
+      return result;
 
     } catch (error) {
       console.error('Error en login:', error);
       
-      // Errores específicos de red/CORS
+      // Errores específicos de red
       if (error instanceof TypeError) {
         if (error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
           return {
             success: false,
-            message: 'Error de conexión. Verifica que el servidor esté ejecutándose y la URL sea correcta.'
-          };
-        }
-        if (error.message.includes('CORS')) {
-          return {
-            success: false,
-            message: 'Error de CORS. El servidor debe permitir conexiones desde este dominio.'
+            message: 'Error de conexión con el proxy. Verifica que el servidor Next.js esté funcionando.'
           };
         }
       }

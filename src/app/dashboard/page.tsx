@@ -124,15 +124,15 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-3 text-sm">
             <div>
               <span className="text-gray-500">URL:</span>
-              <p className="font-medium break-all">{connection.url}</p>
+                <p className="font-medium break-all text-gray-900">{connection.url}</p>
             </div>
             <div>
               <span className="text-gray-500">Usuario:</span>
-              <p className="font-medium">{connection.username}</p>
+                <p className="font-medium text-gray-900">{connection.username}</p>
             </div>
             <div>
               <span className="text-gray-500">Guardado:</span>
-              <p className="font-medium">
+                <p className="font-medium text-gray-900">
                 {new Date(connection.savedAt).toLocaleDateString('es-ES', {
                   year: 'numeric',
                   month: 'short',
