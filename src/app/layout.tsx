@@ -18,17 +18,12 @@ export const metadata: Metadata = {
   generator: "Next.js",
   manifest: "/manifest.json",
   keywords: ["partes", "diarios", "app", "pwa", "nextjs"],
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#3b82f6" },
-    { media: "(prefers-color-scheme: dark)", color: "#3b82f6" }
-  ],
   authors: [
     {
       name: "Partes Diarios Team",
       url: "https://partesdiarios.com",
     }
   ],
-  colorScheme: "light",
   openGraph: {
     type: "website",
     siteName: "Partes Diarios App",
@@ -41,18 +36,19 @@ export const metadata: Metadata = {
     description: "Aplicación PWA para gestión de partes diarios",
   },
   icons: {
-    shortcut: "/favicon.ico",
+    shortcut: "/favicon.svg",
     apple: [
-      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-256x256.png", sizes: "256x256", type: "image/png" },
-      { url: "/icon-384x384.png", sizes: "384x384", type: "image/png" },
-      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon-192x192.svg", sizes: "192x192", type: "image/svg+xml" },
+      { url: "/icon-256x256.svg", sizes: "256x256", type: "image/svg+xml" },
+      { url: "/icon-384x384.svg", sizes: "384x384", type: "image/svg+xml" },
+      { url: "/icon-512x512.svg", sizes: "512x512", type: "image/svg+xml" },
     ],
   },
 };
 
 export const viewport: Viewport = {
   themeColor: "#3b82f6",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
