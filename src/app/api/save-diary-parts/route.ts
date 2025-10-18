@@ -57,6 +57,13 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     console.log('Odoo response data:', data);
     
+    // Si la respuesta es JSON-RPC, extraer el resultado
+    if (data.jsonrpc && data.result !== undefined) {
+      console.log('JSON-RPC response detected, extracting result:', data.result);
+      return NextResponse.json(data.result);
+    }
+    
+    // Si no es JSON-RPC, devolver tal cual
     return NextResponse.json(data);
 
   } catch (error) {

@@ -4,18 +4,17 @@ interface DiaryPartsRequest {
   url: string;
   login: string;
   password: string;
-  date: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: DiaryPartsRequest = await request.json();
-    const { url, login, password, date } = body;
+    const { url, login, password } = body;
 
     // Validar campos requeridos
-    if (!url || !login || !password || !date) {
+    if (!url || !login || !password) {
       return NextResponse.json(
-        { status: 'error', message: 'URL, login, password y date son requeridos' },
+        { status: 'error', message: 'URL, login y password son requeridos' },
         { status: 400 }
       );
     }
@@ -49,65 +48,20 @@ export async function POST(request: NextRequest) {
         console.log('Endpoint no encontrado, devolviendo datos mock para pruebas');
         return NextResponse.json({
           status: "ok",
-          diary_parts: [
-            {
-              id: 9652,
-              name: "PTD/009652",
-              date: date,
-              hr_employee_id: 2626,
-              hr_employee_name: "EDWIN, MARTINEZ VELAZQUEZ",
-              state: "draft",
-              employee_lines_ids: [
-                {
-                  id: 32657,
-                  hr_employee_id: 2626,
-                  hr_employee_name: "EDWIN, MARTINEZ VELAZQUEZ",
-                  bim_resource_id: false,
-                  bim_resource_name: false,
-                  budget_id: false,
-                  budget_name: false,
-                  bim_pcp_id: false,
-                  bim_pcp_name: false,
-                  hh: 10.0
-                },
-                {
-                  id: 32658,
-                  hr_employee_id: 2597,
-                  hr_employee_name: "ALEXANDER FELIZ",
-                  bim_resource_id: false,
-                  bim_resource_name: false,
-                  budget_id: false,
-                  budget_name: false,
-                  bim_pcp_id: false,
-                  bim_pcp_name: false,
-                  hh: 10.0
-                },
-                {
-                  id: 32659,
-                  hr_employee_id: 1160,
-                  hr_employee_name: "ALBERTO, ROSARIO BAUTISTA",
-                  bim_resource_id: false,
-                  bim_resource_name: false,
-                  budget_id: false,
-                  budget_name: false,
-                  bim_pcp_id: false,
-                  bim_pcp_name: false,
-                  hh: 10.0
-                },
-                {
-                  id: 32660,
-                  hr_employee_id: 88,
-                  hr_employee_name: "IVAN GARCIA",
-                  bim_resource_id: false,
-                  bim_resource_name: false,
-                  budget_id: false,
-                  budget_name: false,
-                  bim_pcp_id: false,
-                  bim_pcp_name: false,
-                  hh: 0.0
-                }
-              ]
-            }
+          pcps: [
+            { bim_pcp_id: 101, bim_pcp_name: "Encofrado" },
+            { bim_pcp_id: 102, bim_pcp_name: "Hormigonado" },
+            { bim_pcp_id: 103, bim_pcp_name: "Ferrallado" }
+          ],
+          employees: [
+            { hr_employee_id: 2626, hr_employee_name: "EDWIN, MARTINEZ VELAZQUEZ" },
+            { hr_employee_id: 2597, hr_employee_name: "ALEXANDER FELIZ" },
+            { hr_employee_id: 1160, hr_employee_name: "ALBERTO, ROSARIO BAUTISTA" },
+            { hr_employee_id: 88, hr_employee_name: "IVAN GARCIA" }
+          ],
+          budgets: [
+            { budget_id: 501, budget_name: "Presupuesto Obra 1" },
+            { budget_id: 502, budget_name: "Presupuesto Obra 2" }
           ]
         });
       }
@@ -134,9 +88,18 @@ export async function POST(request: NextRequest) {
 
     // Verificar si hay error en la respuesta JSON-RPC
     if (result.error) {
+      const errorData = result.error.data;
+      let errorMessage = result.error.message || 'Error en la respuesta del servidor';
+      
+      // Detectar el error específico de "no hay partes disponibles"
+      if (errorData && errorData.name === 'builtins.IndexError' && 
+          errorData.debug && errorData.debug.includes('tuple index out of range')) {
+        errorMessage = 'No hay partes diarios disponibles. Por favor, crea un parte diario en Odoo primero.';
+      }
+      
       return NextResponse.json({
         status: 'error',
-        message: result.error.message || 'Error en la respuesta del servidor'
+        message: errorMessage
       });
     }
 

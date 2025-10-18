@@ -25,6 +25,7 @@ interface EmployeeLine {
   bim_pcp_id: number | false;
   bim_pcp_name: string | false;
   hh: number;
+  i?: boolean; // Campo de inasistencia
 }
 
 interface DiaryPart {
@@ -38,10 +39,32 @@ interface DiaryPart {
   employee_lines_ids: EmployeeLine[];
 }
 
+interface PCP {
+  bim_pcp_id: number;
+  bim_pcp_name: string;
+}
+
+interface Employee {
+  hr_employee_id: number;
+  hr_employee_name: string;
+}
+
+interface Budget {
+  budget_id: number;
+  budget_name: string;
+}
+
 interface DiaryPartsResponse {
   status: 'ok' | 'error';
   message?: string;
   diary_parts?: DiaryPart[];
+  part_id?: number;
+  date?: string;
+  part_name?: string;
+  state?: string;
+  pcps?: PCP[];
+  employees?: Employee[];
+  budgets?: Budget[];
 }
 
 class ApiService {
@@ -179,11 +202,8 @@ class ApiService {
         };
       }
 
-      // Usar nuestro proxy API para evitar CORS
+      // Usar nuestro proxy API para evitar CORS - ahora apunta a /load-part
       const proxyEndpoint = '/api/diary-parts';
-      
-      // Obtener la fecha actual para los logs (el servidor usa date.today())
-      const today = new Date().toISOString().split('T')[0];
       
       const response = await fetch(proxyEndpoint, {
         method: 'POST',
@@ -193,8 +213,7 @@ class ApiService {
         body: JSON.stringify({
           url: url,
           login: username,
-          password: password,
-          date: today // Solo para referencia, el servidor no lo usa
+          password: password
         })
       });
 
@@ -206,7 +225,11 @@ class ApiService {
 
       const result = await response.json();
       
-      // El proxy ya devuelve el formato correcto
+      console.log('Diary parts received from backend:', result);
+      
+      // El backend ahora envía listas separadas de PCPs, Empleados y Presupuestos
+      // El frontend debe generar la matriz de empleados x PCPs
+      
       return result;
 
     } catch (error) {
@@ -225,6 +248,195 @@ class ApiService {
       return {
         status: 'error',
         message: error instanceof Error ? error.message : 'Error desconocido obteniendo partes diarios'
+      };
+    }
+  }
+
+  async saveDiaryPartsNew(
+    url: string, 
+    username: string, 
+    password: string, 
+    diaryPartId: number,
+    employees: Array<{hr_employee_id: number, hr_employee_name: string}>,
+    pcps: Array<{bim_pcp_id: number, bim_pcp_name: string}>,
+    budgets: Array<{budget_id: number, budget_name: string}>,
+    pcpData: {[key: string]: number},
+    observations: string,
+    fileData?: {name: string, data: string},
+    inasistencias?: {[employeeId: number]: boolean},
+    noTrabajoState?: boolean
+  ): Promise<{status: 'ok' | 'error', message?: string}> {
+    // Verificar que estamos en el cliente
+    if (typeof window === 'undefined') {
+      return {
+        status: 'error',
+        message: 'Esta función solo puede ejecutarse en el navegador'
+      };
+    }
+
+    try {
+      // Validar URL antes del fetch
+      const urlValidation = this.validateUrl(url);
+      if (!urlValidation.isValid) {
+        return {
+          status: 'error',
+          message: urlValidation.error || 'URL inválida'
+        };
+      }
+
+      console.log('Preparing diary part save (new structure):', {
+        diary_part_id: diaryPartId,
+        employees_count: employees.length,
+        pcps_count: pcps.length,
+        budgets_count: budgets.length,
+        pcp_data_keys: Object.keys(pcpData).length
+      });
+
+      // Construir las líneas de empleados desde los datos del PCP
+      const employeeLines: Array<{
+        hr_employee_id: number;
+        bim_resource_id: number | false;
+        budget_id: number | false;
+        bim_pcp_id: number | false;
+        hh: number;
+        i: boolean;
+      }> = [];
+
+      // Crear las líneas para cada empleado
+      employees.forEach(employee => {
+        const isInasistente = inasistencias?.[employee.hr_employee_id] || false;
+        
+        // Si está marcado como inasistente, solo enviar UNA línea con el primer presupuesto y primer PCP
+        if (isInasistente) {
+          if (budgets.length > 0 && pcps.length > 0) {
+            employeeLines.push({
+              hr_employee_id: employee.hr_employee_id,
+              bim_resource_id: false,
+              budget_id: budgets[0].budget_id,
+              bim_pcp_id: pcps[0].bim_pcp_id,
+              hh: 0,
+              i: true
+            });
+          }
+        } else {
+          // Si NO está marcado como inasistente, enviar todas las líneas con horas > 0
+          budgets.forEach(budget => {
+            pcps.forEach(pcp => {
+              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const hours = pcpData[key] || 0;
+              
+              if (hours > 0) {
+                employeeLines.push({
+                  hr_employee_id: employee.hr_employee_id,
+                  bim_resource_id: false,
+                  budget_id: budget.budget_id,
+                  bim_pcp_id: pcp.bim_pcp_id,
+                  hh: hours,
+                  i: false
+                });
+              }
+            });
+          });
+        }
+      });
+
+      // Preparar los datos del parte diario
+      const diaryPartData: {
+        id: number;
+        observation: string;
+        employee_lines_ids: Array<{
+          hr_employee_id: number;
+          bim_resource_id: number | false;
+          budget_id: number | false;
+          bim_pcp_id: number | false;
+          hh: number;
+          i: boolean;
+        }>;
+        file?: {name: string, data: string};
+        state?: string;
+      } = {
+        id: diaryPartId,
+        observation: observations || '',
+        employee_lines_ids: employeeLines
+      };
+
+      // Agregar archivo si existe
+      if (fileData) {
+        diaryPartData.file = fileData;
+      }
+
+      // Agregar estado "dont_work" si está marcado
+      if (noTrabajoState) {
+        diaryPartData.state = 'dont_work';
+      }
+
+      console.log('Final diary part data:', {
+        id: diaryPartData.id,
+        employee_lines_count: employeeLines.length,
+        employee_lines: employeeLines,
+        observation: diaryPartData.observation,
+        has_file: !!diaryPartData.file
+      });
+
+      console.log('=== ENVIANDO A PROXY ===');
+      console.log('URL:', url);
+      console.log('Username:', username);
+      console.log('Diary Part:', JSON.stringify(diaryPartData, null, 2));
+
+      // Usar nuestro proxy API para evitar CORS
+      const proxyEndpoint = '/api/save-diary-parts';
+      
+      const response = await fetch(proxyEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: url,
+          username: username,
+          password: password,
+          diary_part: diaryPartData
+        })
+      });
+
+      console.log('=== RESPUESTA DEL PROXY ===');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('Save response error:', errorData);
+        const errorMessage = errorData?.message || `Error HTTP: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      console.log('Save result (RAW):', result);
+      console.log('Save result (JSON):', JSON.stringify(result, null, 2));
+      console.log('result.status value:', result.status);
+      console.log('typeof result:', typeof result);
+      console.log('typeof result.status:', typeof result.status);
+      console.log('result has status property:', 'status' in result);
+      
+      // El proxy ya devuelve el formato correcto
+      return result;
+
+    } catch (error) {
+      console.error('Error guardando partes diarios:', error);
+      
+      // Errores específicos de red
+      if (error instanceof TypeError) {
+        if (error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
+          return {
+            status: 'error',
+            message: 'Error de conexión con el proxy. Verifica que el servidor Next.js esté funcionando.'
+          };
+        }
+      }
+      
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Error desconocido guardando partes diarios'
       };
     }
   }
@@ -403,4 +615,4 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
-export type { LoginRequest, LoginResponse, ApiError, DiaryPart, EmployeeLine, DiaryPartsResponse };
+export type { LoginRequest, LoginResponse, ApiError, DiaryPart, EmployeeLine, DiaryPartsResponse, PCP, Employee, Budget };
