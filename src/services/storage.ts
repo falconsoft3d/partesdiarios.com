@@ -4,6 +4,7 @@ interface ConnectionData {
   url: string;
   username: string;
   password: string;
+  employeeName?: string;
   savedAt: string;
 }
 
@@ -20,7 +21,7 @@ class StorageService {
     return bytes.toString(CryptoJS.enc.Utf8);
   }
 
-  saveConnection(url: string, username: string, password: string): boolean {
+  saveConnection(url: string, username: string, password: string, employeeName?: string): boolean {
     // Solo funciona en el cliente
     if (typeof window === 'undefined') {
       return false;
@@ -31,6 +32,7 @@ class StorageService {
         url,
         username,
         password,
+        employeeName,
         savedAt: new Date().toISOString()
       };
 
@@ -100,7 +102,8 @@ class StorageService {
       return this.saveConnection(
         updatedConnection.url,
         updatedConnection.username,
-        updatedConnection.password
+        updatedConnection.password,
+        updatedConnection.employeeName
       );
     } catch (error) {
       console.error('Error actualizando conexión:', error);

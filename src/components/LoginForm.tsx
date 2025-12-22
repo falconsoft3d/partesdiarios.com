@@ -22,6 +22,30 @@ export default function LoginForm() {
   const [showQR, setShowQR] = useState(false);
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [rememberMe, setRememberMe] = useState<boolean>(false);
+
+  // Cargar credenciales guardadas al montar el componente
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedUrl = localStorage.getItem('remembered_url');
+        const savedUsername = localStorage.getItem('remembered_username');
+        const savedPassword = localStorage.getItem('remembered_password');
+        const savedRemember = localStorage.getItem('remember_me');
+
+        if (savedRemember === 'true' && savedUrl && savedUsername && savedPassword) {
+          setFormData({
+            url: savedUrl,
+            username: savedUsername,
+            password: savedPassword
+          });
+          setRememberMe(true);
+        }
+      } catch (error) {
+        console.error('Error al cargar credenciales guardadas:', error);
+      }
+    }
+  }, []);
 
   // Limpiar error global cuando cambie algún campo
   useEffect(() => {
@@ -75,6 +99,21 @@ export default function LoginForm() {
       const result = await login(formData.url, formData.username, formData.password);
       
       if (result.success) {
+        // Guardar o limpiar credenciales según la opción de recordar
+        if (typeof window !== 'undefined') {
+          if (rememberMe) {
+            localStorage.setItem('remembered_url', formData.url);
+            localStorage.setItem('remembered_username', formData.username);
+            localStorage.setItem('remembered_password', formData.password);
+            localStorage.setItem('remember_me', 'true');
+          } else {
+            localStorage.removeItem('remembered_url');
+            localStorage.removeItem('remembered_username');
+            localStorage.removeItem('remembered_password');
+            localStorage.removeItem('remember_me');
+          }
+        }
+
         setSuccessMessage('¡Conexión exitosa! Redirigiendo...');
         // Aquí podrías redirigir al dashboard
         setTimeout(() => {
@@ -212,6 +251,20 @@ export default function LoginForm() {
               )}
             </div>
 
+            {/* Remember Me Checkbox */}
+            <div className="flex items-center">
+              <input
+                id="remember-me"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+              />
+              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 cursor-pointer select-none">
+                Recordar mis datos
+              </label>
+            </div>
+
             {/* Submit Button */}
             <button
               type="submit"
@@ -268,9 +321,12 @@ export default function LoginForm() {
           )}
 
           {/* Footer */}
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
             <p className="text-xs text-gray-500">
               Versión 1.0.0 • PWA
+            </p>
+            <p className="text-xs text-gray-600">
+              Desarrollado con <a href="https://www.odoo.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Odoo</a> por <a href="https://www.marlonfalcon.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Marlon Falcon</a>
             </p>
           </div>
         </div>

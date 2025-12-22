@@ -24,12 +24,35 @@ export default function Dashboard() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [noTrabajoState, setNoTrabajoState] = useState<boolean>(false);
+  const [historyCount, setHistoryCount] = useState<number>(0);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       window.location.href = '/';
     }
   }, [isAuthenticated, isLoading]);
+
+  // Cargar contador del historial
+  useEffect(() => {
+    const updateHistoryCount = () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const existingHistory = localStorage.getItem('diary_parts_history');
+          const history = existingHistory ? JSON.parse(existingHistory) : [];
+          setHistoryCount(history.length);
+        } catch (error) {
+          console.error('Error al leer el historial:', error);
+          setHistoryCount(0);
+        }
+      }
+    };
+
+    updateHistoryCount();
+
+    // Actualizar el contador cada vez que cambie el localStorage
+    const interval = setInterval(updateHistoryCount, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Funciones para guardado automático local
   const saveToLocalStorage = useCallback(() => {
@@ -92,6 +115,11 @@ export default function Dashboard() {
         setShowParts(true);
         setError(null);
         // Los datos se guardarán automáticamente por el useEffect
+        
+        // Guardar en el historial que se descargó
+        setTimeout(() => {
+          saveDownloadToHistory();
+        }, 100);
       } else {
         setError(result.message || 'Error al obtener los partes diarios');
         setShowParts(false);
@@ -200,11 +228,78 @@ export default function Dashboard() {
     }
   };
 
+  const saveDownloadToHistory = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        // Generar el texto formateado
+        let textData = `📥 PARTE DESCARGADO\n`;
+        textData += `PARTE DIARIO: ${diaryPartName}\n`;
+        textData += `FECHA: ${diaryPartDate}\n`;
+        textData += `ID: ${diaryPartId}\n`;
+        textData += `DESCARGADO: ${new Date().toLocaleString('es-ES')}\n`;
+        textData += `\n${'='.repeat(80)}\n\n`;
+        
+        textData += `EMPLEADOS: ${employees.length}\n`;
+        textData += `PRESUPUESTOS: ${budgets.length}\n`;
+        textData += `PCPs: ${pcps.length}\n`;
+        textData += `\n${'='.repeat(80)}\n\n`;
+        
+        textData += 'EMPLEADOS:\n';
+        employees.forEach(employee => {
+          textData += `- ${employee.hr_employee_name} (ID: ${employee.hr_employee_id})\n`;
+        });
+        
+        textData += '\nPRESUPUESTOS:\n';
+        budgets.forEach(budget => {
+          textData += `- ${budget.budget_name} (ID: ${budget.budget_id})\n`;
+        });
+        
+        textData += '\nPCPs:\n';
+        pcps.forEach(pcp => {
+          textData += `- ${pcp.bim_pcp_name} (ID: ${pcp.bim_pcp_id})\n`;
+        });
+
+        // Crear la entrada del historial
+        const historyEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date().toISOString(),
+          date: diaryPartDate,
+          partName: `📥 ${diaryPartName}`,
+          partId: diaryPartId || 0,
+          employeesCount: employees.length,
+          pcpsCount: pcps.length,
+          budgetsCount: budgets.length,
+          totalHours: 0,
+          textData,
+          action: 'download'
+        };
+
+        // Obtener historial existente
+        const existingHistory = localStorage.getItem('diary_parts_history');
+        const history = existingHistory ? JSON.parse(existingHistory) : [];
+        
+        // Agregar nueva entrada al inicio
+        history.unshift(historyEntry);
+        
+        // Limitar el historial a las últimas 50 entradas
+        const limitedHistory = history.slice(0, 50);
+        
+        // Guardar en localStorage
+        localStorage.setItem('diary_parts_history', JSON.stringify(limitedHistory));
+        
+        console.log('✅ Descarga registrada en el historial');
+      } catch (error) {
+        console.error('Error al guardar descarga en el historial:', error);
+      }
+    }
+  };
+
   const saveToHistory = () => {
     if (typeof window !== 'undefined') {
       try {
         // Generar el texto formateado de la matriz
-        let textData = `PARTE DIARIO: ${diaryPartName}\n`;
+        let textData = `📤 PARTE SUBIDO\n`;
+        textData += `PARTE DIARIO: ${diaryPartName}\n`;
         textData += `FECHA: ${diaryPartDate}\n`;
         textData += `ID: ${diaryPartId}\n`;
         textData += `GUARDADO: ${new Date().toLocaleString('es-ES')}\n`;
@@ -261,13 +356,14 @@ export default function Dashboard() {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           timestamp: new Date().toISOString(),
           date: diaryPartDate,
-          partName: diaryPartName,
+          partName: `📤 ${diaryPartName}`,
           partId: diaryPartId || 0,
           employeesCount: employees.length,
           pcpsCount: pcps.length,
           budgetsCount: budgets.length,
           totalHours,
-          textData
+          textData,
+          action: 'upload'
         };
 
         // Obtener historial existente
@@ -482,24 +578,36 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                Dashboard - Partes Diarios
+                Parte Offline: {connection.employeeName || connection.username}
               </h1>
               <p className="text-gray-600">
                 Conectado a: <span className="font-medium">{connection.url}</span>
               </p>
-              <p className="text-sm text-gray-500">
-                Usuario: {connection.username}
-              </p>
+              {diaryPartDate && (
+                <p className="text-sm text-blue-600 font-semibold mt-1">
+                  Fecha: {new Date(diaryPartDate).toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </p>
+              )}
             </div>
             <div className="flex space-x-2">
               <button
                 onClick={handleHistory}
-                className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                className="relative p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                 title="Ver historial"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
+                {historyCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {historyCount > 99 ? '99+' : historyCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={handleManageConnection}
@@ -689,7 +797,7 @@ export default function Dashboard() {
                                   type="number"
                                   step="0.5"
                                   min="0"
-                                  value={pcpData[key] || 0}
+                                  value={pcpData[key] || ''}
                                   onChange={(e) => handlePcpChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
                                   className={`w-12 px-1 py-1 border border-gray-300 rounded text-sm text-center text-gray-900 focus:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none ${
                                     (pcpData[key] || 0) > 0 
@@ -846,9 +954,23 @@ export default function Dashboard() {
               {loadingParts ? 'Cargando...' : 'Leer Parte'}
             </button>
             {hasLocalData() && (
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                Ya tienes un parte cargado. Súbelo primero para cargar uno nuevo.
-              </p>
+              <div className="mt-3">
+                <div className="mb-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-xs text-yellow-800 font-medium">
+                    ⚠️ Ya tienes un parte cargado
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Súbelo o límpialo para cargar uno nuevo
+                  </p>
+                </div>
+                <button
+                  onClick={handleClearLocalData}
+                  className="w-full flex items-center justify-center space-x-2 bg-red-100 text-red-700 py-2 px-4 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Descartar parte actual</span>
+                </button>
+              </div>
             )}
             {!hasLocalData() && !loadingParts && (
               <p className="text-xs text-gray-500 mt-2 text-center">
@@ -910,6 +1032,13 @@ export default function Dashboard() {
               </p>
             )}
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 text-center pb-4">
+          <p className="text-xs text-gray-600">
+            Desarrollado con <a href="https://www.odoo.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Odoo</a> por <a href="https://www.marlonfalcon.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Marlon Falcon</a>
+          </p>
         </div>
       </div>
     </div>

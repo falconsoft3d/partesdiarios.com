@@ -93,6 +93,18 @@ export default function Connections() {
               </div>
             </div>
 
+            {/* Employee Name */}
+            {connection.employeeName && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre Completo
+                </label>
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <p className="text-gray-900 font-medium">{connection.employeeName}</p>
+                </div>
+              </div>
+            )}
+
             {/* Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -179,6 +191,13 @@ export default function Connections() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 text-center pb-4">
+          <p className="text-xs text-gray-600">
+            Desarrollado con <a href="https://www.odoo.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Odoo</a> por <a href="https://www.marlonfalcon.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Marlon Falcon</a>
+          </p>
         </div>
       </div>
     </div>

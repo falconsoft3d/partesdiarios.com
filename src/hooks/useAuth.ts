@@ -64,8 +64,9 @@ export function useAuth() {
       const response = await apiService.login(url, username, password);
       
       if (response.success) {
-        // Guardar conexión encriptada
-        const saved = storageService.saveConnection(url, username, password);
+        // Guardar conexión encriptada con el nombre del empleado
+        const employeeName = response.name || username;
+        const saved = storageService.saveConnection(url, username, password, employeeName);
         
         if (saved) {
           const connection = storageService.getConnection();
