@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { apiService, PCP, Employee, Budget } from '@/services/api';
+import { apiService, PCP, Employee, Equipment, Budget } from '@/services/api';
 import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading, connection, logout } = useAuth();
   const [pcps, setPcps] = useState<PCP[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [diaryPartId, setDiaryPartId] = useState<number | null>(null);
   const [diaryPartName, setDiaryPartName] = useState<string>('');
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showParts, setShowParts] = useState(false);
   const [pcpData, setPcpData] = useState<{[key: string]: number}>({});
+  const [equipmentData, setEquipmentData] = useState<{[key: string]: number}>({});
   const [observations, setObservations] = useState<string>('');
   const [attachments, setAttachments] = useState<File | null>(null);
   const [inasistencias, setInasistencias] = useState<{[employeeId: number]: boolean}>({});
@@ -33,8 +35,10 @@ export default function Dashboard() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [noTrabajoState, setNoTrabajoState] = useState<boolean>(false);
   const [historyCount, setHistoryCount] = useState<number>(0);
-  const [hiddenPcps, setHiddenPcps] = useState<Set<string>>(new Set());
+  const [hiddenPcpsManoObra, setHiddenPcpsManoObra] = useState<Set<string>>(new Set());
+  const [hiddenPcpsEquipos, setHiddenPcpsEquipos] = useState<Set<string>>(new Set());
   const [showHiddenColumnsMenu, setShowHiddenColumnsMenu] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'manoObra' | 'equipos'>('manoObra');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -72,11 +76,21 @@ export default function Dashboard() {
       const localData = {
         pcps,
         employees,
+        equipments,
         budgets,
         diaryPartId,
         diaryPartName,
         diaryPartDate,
+        diaryPartTurno,
+        diaryPartSupervisor,
+        diaryPartFramework,
+        diaryPartResponsable,
+        diaryPartDisciplina,
+        diaryPartArea,
+        diaryPartUbicacion,
+        cantPartesAbiertos,
         pcpData,
+        equipmentData,
         observations,
         inasistencias,
         noTrabajoState,
@@ -85,7 +99,7 @@ export default function Dashboard() {
       };
       localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
     }
-  }, [pcps, employees, budgets, diaryPartId, diaryPartName, diaryPartDate, pcpData, observations, inasistencias, noTrabajoState, attachments]);
+  }, [pcps, employees, equipments, budgets, diaryPartId, diaryPartName, diaryPartDate, diaryPartTurno, diaryPartSupervisor, diaryPartFramework, diaryPartResponsable, diaryPartDisciplina, diaryPartArea, diaryPartUbicacion, cantPartesAbiertos, pcpData, equipmentData, observations, inasistencias, noTrabajoState, attachments]);
 
   // Cargar datos del localStorage al montar el componente
   useEffect(() => {
@@ -97,7 +111,7 @@ export default function Dashboard() {
     if (employees.length > 0 || pcps.length > 0) {
       saveToLocalStorage();
     }
-  }, [employees, pcps, pcpData, observations, saveToLocalStorage]);
+  }, [employees, equipments, pcps, pcpData, equipmentData, observations, saveToLocalStorage]);
 
   const handleLoadPart = async () => {
     if (!connection) return;
@@ -115,6 +129,7 @@ export default function Dashboard() {
       if (result.status === 'ok' && result.pcps && result.employees) {
         setPcps(result.pcps || []);
         setEmployees(result.employees || []);
+        setEquipments(result.equipments || []);
         setBudgets(result.budgets || []);
         // Guardar la información del parte diario
         setDiaryPartId(result.part_id || null);
@@ -161,6 +176,14 @@ export default function Dashboard() {
   const handlePcpChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
     const key = `${employeeId}-${budgetId}-${pcpId}`;
     setPcpData(prev => ({
+      ...prev,
+      [key]: Number(value) || 0
+    }));
+  };
+
+  const handleEquipmentChange = (licensePlate: string, budgetId: number, pcpId: number, value: string) => {
+    const key = `${licensePlate}-${budgetId}-${pcpId}`;
+    setEquipmentData(prev => ({
       ...prev,
       [key]: Number(value) || 0
     }));
@@ -221,11 +244,21 @@ export default function Dashboard() {
           const parsed = JSON.parse(savedData);
           setPcps(parsed.pcps || []);
           setEmployees(parsed.employees || []);
+          setEquipments(parsed.equipments || []);
           setBudgets(parsed.budgets || []);
           setDiaryPartId(parsed.diaryPartId || null);
           setDiaryPartName(parsed.diaryPartName || '');
           setDiaryPartDate(parsed.diaryPartDate || '');
+          setDiaryPartTurno(parsed.diaryPartTurno || '');
+          setDiaryPartSupervisor(parsed.diaryPartSupervisor || '');
+          setDiaryPartFramework(parsed.diaryPartFramework || '');
+          setDiaryPartResponsable(parsed.diaryPartResponsable || '');
+          setDiaryPartDisciplina(parsed.diaryPartDisciplina || '');
+          setDiaryPartArea(parsed.diaryPartArea || '');
+          setDiaryPartUbicacion(parsed.diaryPartUbicacion || '');
+          setCantPartesAbiertos(parsed.cantPartesAbiertos || 0);
           setPcpData(parsed.pcpData || {});
+          setEquipmentData(parsed.equipmentData || {});
           setObservations(parsed.observations || '');
           setInasistencias(parsed.inasistencias || {});
           setNoTrabajoState(parsed.noTrabajoState || false);
@@ -412,6 +445,7 @@ export default function Dashboard() {
     if (window.confirm('¿Estás seguro de que deseas limpiar el parte actual? Se perderán todos los cambios no guardados.')) {
       setPcps([]);
       setEmployees([]);
+      setEquipments([]);
       setBudgets([]);
       setDiaryPartId(null);
       setDiaryPartName('');
@@ -426,6 +460,7 @@ export default function Dashboard() {
       setCantPartesAbiertos(0);
       setShowParts(false);
       setPcpData({});
+      setEquipmentData({});
       setObservations('');
       setInasistencias({});
       setNoTrabajoState(false);
@@ -546,6 +581,7 @@ export default function Dashboard() {
       // Limpiar los datos y ocultar la tabla
       setPcps([]);
       setEmployees([]);
+      setEquipments([]);
       setBudgets([]);
       setDiaryPartId(null);
       setDiaryPartName('');
@@ -560,6 +596,7 @@ export default function Dashboard() {
       setCantPartesAbiertos(0);
       setShowParts(false);
       setPcpData({});
+      setEquipmentData({});
       setObservations('');
       setInasistencias({});
       setNoTrabajoState(false);
@@ -592,9 +629,10 @@ export default function Dashboard() {
     window.location.href = '/';
   };
 
-  const togglePcpVisibility = (budgetId: number, pcpId: number) => {
+  const togglePcpVisibility = (budgetId: number, pcpId: number, tableType: 'manoObra' | 'equipos' = 'manoObra') => {
     const key = `${budgetId}-${pcpId}`;
-    setHiddenPcps(prev => {
+    const setterFn = tableType === 'manoObra' ? setHiddenPcpsManoObra : setHiddenPcpsEquipos;
+    setterFn(prev => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
         newSet.delete(key);
@@ -605,8 +643,12 @@ export default function Dashboard() {
     });
   };
 
-  const showAllPcps = () => {
-    setHiddenPcps(new Set());
+  const showAllPcps = (tableType: 'manoObra' | 'equipos' = 'manoObra') => {
+    if (tableType === 'manoObra') {
+      setHiddenPcpsManoObra(new Set());
+    } else {
+      setHiddenPcpsEquipos(new Set());
+    }
     setShowHiddenColumnsMenu(false);
   };
 
@@ -694,11 +736,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Diary Parts List - Editable Table */}
+        {/* Información del parte - Contenedor separado */}
         {showParts && employees.length > 0 && pcps.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 mt-6">
-            {/* Información del parte */}
-            <div className="mb-6 space-y-3">
+          <div className="bg-white rounded-2xl shadow-xl p-6 mt-3">
+            <div className="space-y-3">
               {/* Framework Contract, Responsable, Parte y Turno */}
               {diaryPartFramework && (
                 <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
@@ -744,7 +785,39 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          </div>
+        )}
 
+        {/* Diary Parts List - Editable Table */}
+        {showParts && employees.length > 0 && pcps.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl p-6 mt-3">
+            {/* Tabs */}
+            <div className="flex space-x-2 mb-4 border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('manoObra')}
+                className={`px-6 py-3 font-semibold text-sm transition-colors relative ${
+                  activeTab === 'manoObra'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                👷 Mano de Obra
+              </button>
+              <button
+                onClick={() => setActiveTab('equipos')}
+                className={`px-6 py-3 font-semibold text-sm transition-colors relative ${
+                  activeTab === 'equipos'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🚜 Equipos
+              </button>
+            </div>
+
+            {/* Contenido de Mano de Obra */}
+            {activeTab === 'manoObra' && (
+              <>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-4">
                 
@@ -810,17 +883,17 @@ export default function Dashboard() {
             {/* Tabla editable con columnas combinadas de PCP x Presupuesto */}
             <div className="overflow-x-auto">
               {/* Botón para mostrar columnas ocultas */}
-              {hiddenPcps.size > 0 && (
+              {hiddenPcpsManoObra.size > 0 && (
                 <div className="mb-3 flex items-center justify-end">
                   <button
-                    onClick={showAllPcps}
+                    onClick={() => showAllPcps('manoObra')}
                     className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center space-x-1"
                   >
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
-                    <span>Mostrar {hiddenPcps.size} columna{hiddenPcps.size > 1 ? 's' : ''} oculta{hiddenPcps.size > 1 ? 's' : ''}</span>
+                    <span>Mostrar {hiddenPcpsManoObra.size} columna{hiddenPcpsManoObra.size > 1 ? 's' : ''} oculta{hiddenPcpsManoObra.size > 1 ? 's' : ''}</span>
                   </button>
                 </div>
               )}
@@ -837,40 +910,53 @@ export default function Dashboard() {
                     <th className="border border-gray-300 px-4 py-3 text-center text-sm font-medium text-gray-700" title="Inasistencia" rowSpan={2}>
                       I
                     </th>
-                    {budgets.map((budget) => (
-                      <th 
-                        key={budget.budget_id} 
-                        className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
-                        colSpan={pcps.filter(pcp => !hiddenPcps.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)).length}
-                      >
-                        {budget.budget_name}
-                      </th>
-                    ))}
+                    {budgets.map((budget) => {
+                      // Contar cuántos PCPs visibles tiene este budget
+                      const visiblePcpsCount = pcps.filter(pcp => !hiddenPcpsManoObra.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)).length;
+                      
+                      // Si no hay PCPs visibles, no mostrar el budget
+                      if (visiblePcpsCount === 0) return null;
+                      
+                      return (
+                        <th 
+                          key={budget.budget_id} 
+                          className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
+                          colSpan={visiblePcpsCount}
+                        >
+                          {budget.budget_name}
+                        </th>
+                      );
+                    })}
                   </tr>
                   {/* Segunda fila de cabecera: PCPs (repetidos por cada presupuesto) */}
                   <tr className="bg-gray-50">
                     {budgets.map((budget) => (
                       pcps.map((pcp) => {
                         const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                        const isHidden = hiddenPcps.has(key);
+                        const isHidden = hiddenPcpsManoObra.has(key);
                         
                         if (isHidden) return null;
                         
                         return (
                           <th 
                             key={key}
-                            onClick={() => togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id)}
-                            className="border border-gray-300 px-2 py-8 text-center text-xs font-medium text-gray-700 relative cursor-pointer hover:bg-gray-200 transition-colors group"
-                            title="Clic para ocultar esta columna"
+                            className="border border-gray-300 px-2 py-8 text-center text-xs font-medium text-gray-700 relative group"
                           >
-                            <div className="transform -rotate-90 whitespace-nowrap absolute inset-0 flex items-center justify-center">
+                            <div className="transform -rotate-90 whitespace-nowrap absolute inset-0 flex items-center justify-center pointer-events-none">
                               {pcp.bim_pcp_name}
                             </div>
-                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id, 'manoObra');
+                              }}
+                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5 pointer-events-auto"
+                              title="Clic para ocultar esta columna"
+                            >
                               <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                               </svg>
-                            </div>
+                            </button>
                           </th>
                         );
                       })
@@ -918,7 +1004,7 @@ export default function Dashboard() {
                         {budgets.map((budget) => (
                           pcps.map((pcp) => {
                             const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                            const isHidden = hiddenPcps.has(columnKey);
+                            const isHidden = hiddenPcpsManoObra.has(columnKey);
                             
                             if (isHidden) return null;
                             
@@ -956,7 +1042,7 @@ export default function Dashboard() {
                     {budgets.map((budget) => (
                       pcps.map((pcp) => {
                         const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                        const isHidden = hiddenPcps.has(columnKey);
+                        const isHidden = hiddenPcpsManoObra.has(columnKey);
                         
                         if (isHidden) return null;
                         
@@ -1049,11 +1135,215 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+              </>
+            )}
+
+            {/* Contenido de Equipos */}
+            {activeTab === 'equipos' && (
+              <>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-4">
+                <span className="text-sm font-semibold text-gray-700">🚜 Equipos</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                  💾 Guardado automático local
+                </span>
+              </div>
+            </div>
+
+            {saveError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <AlertCircle className="h-4 w-4 text-red-500 mr-2" />
+                  <span className="text-red-700 text-sm">{saveError}</span>
+                </div>
+              </div>
+            )}
+            
+            {saveSuccess && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center">
+                  <svg className="h-4 w-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-green-700 text-sm">{saveSuccess}</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Tabla de equipos */}
+            <div className="overflow-x-auto">
+              {hiddenPcpsEquipos.size > 0 && (
+                <div className="mb-3 flex items-center justify-end">
+                  <button
+                    onClick={() => showAllPcps('equipos')}
+                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center space-x-1"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span>Mostrar {hiddenPcpsEquipos.size} columna{hiddenPcpsEquipos.size > 1 ? 's' : ''} oculta{hiddenPcpsEquipos.size > 1 ? 's' : ''}</span>
+                  </button>
+                </div>
+              )}
+              <table className="w-full border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-blue-50">
+                    <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
+                      Placa
+                    </th>
+                    <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
+                      Equipo
+                    </th>
+                    {budgets.map((budget) => {
+                      const visiblePcpsCount = pcps.filter(pcp => !hiddenPcpsEquipos.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)).length;
+                      if (visiblePcpsCount === 0) return null;
+                      
+                      return (
+                        <th 
+                          key={budget.budget_id} 
+                          className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
+                          colSpan={visiblePcpsCount}
+                        >
+                          {budget.budget_name}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-gray-50">
+                    {budgets.map((budget) => (
+                      pcps.map((pcp) => {
+                        const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        const isHidden = hiddenPcpsEquipos.has(key);
+                        
+                        if (isHidden) return null;
+                        
+                        return (
+                          <th 
+                            key={key}
+                            className="border border-gray-300 px-2 py-8 text-center text-xs font-medium text-gray-700 relative group"
+                          >
+                            <div className="transform -rotate-90 whitespace-nowrap absolute inset-0 flex items-center justify-center pointer-events-none">
+                              {pcp.bim_pcp_name}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id, 'equipos');
+                              }}
+                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5 pointer-events-auto"
+                              title="Clic para ocultar esta columna"
+                            >
+                              <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                              </svg>
+                            </button>
+                          </th>
+                        );
+                      })
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {equipments.map((equipment, index) => {
+                    let totalHours = 0;
+                    budgets.forEach(budget => {
+                      pcps.forEach(pcp => {
+                        const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        const value = equipmentData[key] || 0;
+                        totalHours += value;
+                      });
+                    });
+                    
+                    return (
+                      <tr key={equipment.license_plate} className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
+                          {equipment.license_plate}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900">
+                          {equipment.name}
+                        </td>
+                        {budgets.map((budget) => (
+                          pcps.map((pcp) => {
+                            const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                            const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                            const isHidden = hiddenPcpsEquipos.has(columnKey);
+                            
+                            if (isHidden) return null;
+                            
+                            return (
+                              <td key={key} className="border border-gray-300 px-2 py-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  value={equipmentData[key] || ''}
+                                  onChange={(e) => handleEquipmentChange(equipment.license_plate, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder=""
+                                />
+                              </td>
+                            );
+                          })
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-100 font-semibold">
+                    <td colSpan={2} className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
+                      Subtotal (horas):
+                    </td>
+                    {budgets.map((budget) => (
+                      pcps.map((pcp) => {
+                        const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        const isHidden = hiddenPcpsEquipos.has(columnKey);
+                        
+                        if (isHidden) return null;
+                        
+                        let subtotal = 0;
+                        equipments.forEach(equipment => {
+                          const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                          subtotal += equipmentData[key] || 0;
+                        });
+                        
+                        return (
+                          <td key={columnKey} className="border border-gray-300 px-2 py-2 text-center">
+                            <span className="text-xs font-bold text-blue-700">
+                              {subtotal.toFixed(1)}h
+                            </span>
+                          </td>
+                        );
+                      })
+                    ))}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Info de presupuestos disponibles */}
+            {budgets.length > 0 && (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">Presupuestos Disponibles:</h4>
+                <div className="flex flex-wrap gap-2">
+                  {budgets.map((budget) => (
+                    <span key={budget.budget_id} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {budget.budget_name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+              </>
+            )}
           </div>
         )}
 
         {showParts && employees.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 mt-6 text-center">
+          <div className="bg-white rounded-2xl shadow-xl p-6 mt-3 text-center">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               Sin empleados
             </h3>
@@ -1064,7 +1354,7 @@ export default function Dashboard() {
         )}
 
         {/* Main Content - Cards moved to bottom */}
-        <div className="grid gap-6 md:grid-cols-2 mt-6">
+        <div className="grid gap-6 md:grid-cols-2 mt-3">
           {/* Cargar Parte Card */}
           <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
             <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">

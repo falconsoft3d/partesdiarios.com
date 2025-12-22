@@ -50,6 +50,11 @@ interface Employee {
   hr_employee_name: string;
 }
 
+interface Equipment {
+  name: string;
+  license_plate: string;
+}
+
 interface Budget {
   budget_id: number;
   budget_name: string;
@@ -70,8 +75,10 @@ interface DiaryPartsResponse {
   diciplina?: string;
   area?: string;
   ubicacion?: string;
+  cant_partes_abiertos?: number;
   pcps?: PCP[];
   employees?: Employee[];
+  equipments?: Equipment[];
   budgets?: Budget[];
 }
 
@@ -623,4 +630,4 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
-export type { LoginRequest, LoginResponse, ApiError, DiaryPart, EmployeeLine, DiaryPartsResponse, PCP, Employee, Budget };
+export type { LoginRequest, LoginResponse, ApiError, DiaryPart, EmployeeLine, DiaryPartsResponse, PCP, Employee, Equipment, Budget };
