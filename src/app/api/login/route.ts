@@ -6,6 +6,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { url, login, password } = body;
 
+    console.log('=== LOGIN API ROUTE ===');
+    console.log('URL recibida:', url);
+    console.log('Login:', login);
+
     if (!url || !login || !password) {
       return NextResponse.json(
         { success: false, message: 'Faltan parámetros requeridos' },
@@ -13,9 +17,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Construir la URL del endpoint
+    // Construir la URL del endpoint de login
     const cleanUrl = url.replace(/\/$/, '');
-    const endpoint = `${cleanUrl}/bim/diary-part-offline/pwa/load-part`;
+    const endpoint = `${cleanUrl}/bim/diary-part-offline/pwa/login`;
+    
+    console.log('Endpoint construido:', endpoint);
 
     // Hacer la petición al servidor real
     const response = await fetch(endpoint, {
@@ -29,23 +35,29 @@ export async function POST(request: NextRequest) {
       })
     });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: `Error del servidor: ${response.status} - ${response.statusText}` 
-        },
-        { status: response.status }
-      );
-    }
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
 
     const data = await response.json();
+    console.log('Response data:', data);
     
-    return NextResponse.json({
-      success: true,
-      data: data,
-      message: 'Login exitoso'
-    });
+    // El backend de Odoo devuelve la respuesta en data.result
+    const result = data.result || data;
+    console.log('Result:', result);
+    
+    // Verificar la respuesta del backend
+    if (result.status === 'ok') {
+      return NextResponse.json({
+        success: true,
+        name: result.name,
+        message: 'Login exitoso'
+      });
+    } else {
+      return NextResponse.json({
+        success: false,
+        message: 'Credenciales incorrectas'
+      });
+    }
 
   } catch (error) {
     console.error('Error en proxy login:', error);

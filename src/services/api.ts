@@ -63,6 +63,13 @@ interface DiaryPartsResponse {
   date?: string;
   part_name?: string;
   state?: string;
+  turno?: string;
+  framework_contract_id?: string;
+  responsable?: string;
+  supervisor?: string;
+  diciplina?: string;
+  area?: string;
+  ubicacion?: string;
   pcps?: PCP[];
   employees?: Employee[];
   budgets?: Budget[];

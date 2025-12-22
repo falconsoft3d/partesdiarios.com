@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { apiService, PCP, Employee, Budget } from '@/services/api';
-import { Settings, LogOut, Download, AlertCircle, Upload, Trash2 } from 'lucide-react';
+import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading, connection, logout } = useAuth();
@@ -13,6 +13,14 @@ export default function Dashboard() {
   const [diaryPartId, setDiaryPartId] = useState<number | null>(null);
   const [diaryPartName, setDiaryPartName] = useState<string>('');
   const [diaryPartDate, setDiaryPartDate] = useState<string>('');
+  const [diaryPartTurno, setDiaryPartTurno] = useState<string>('');
+  const [diaryPartSupervisor, setDiaryPartSupervisor] = useState<string>('');
+  const [diaryPartFramework, setDiaryPartFramework] = useState<string>('');
+  const [diaryPartResponsable, setDiaryPartResponsable] = useState<string>('');
+  const [diaryPartDisciplina, setDiaryPartDisciplina] = useState<string>('');
+  const [diaryPartArea, setDiaryPartArea] = useState<string>('');
+  const [diaryPartUbicacion, setDiaryPartUbicacion] = useState<string>('');
+  const [cantPartesAbiertos, setCantPartesAbiertos] = useState<number>(0);
   const [loadingParts, setLoadingParts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showParts, setShowParts] = useState(false);
@@ -25,6 +33,8 @@ export default function Dashboard() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [noTrabajoState, setNoTrabajoState] = useState<boolean>(false);
   const [historyCount, setHistoryCount] = useState<number>(0);
+  const [hiddenPcps, setHiddenPcps] = useState<Set<string>>(new Set());
+  const [showHiddenColumnsMenu, setShowHiddenColumnsMenu] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -110,6 +120,14 @@ export default function Dashboard() {
         setDiaryPartId(result.part_id || null);
         setDiaryPartName(result.part_name || '');
         setDiaryPartDate(result.date || '');
+        setDiaryPartTurno(result.turno || '');
+        setDiaryPartSupervisor(result.supervisor || '');
+        setDiaryPartFramework(result.framework_contract_id || '');
+        setDiaryPartResponsable(result.responsable || '');
+        setDiaryPartDisciplina(result.diciplina || '');
+        setDiaryPartArea(result.area || '');
+        setDiaryPartUbicacion(result.ubicacion || '');
+        setCantPartesAbiertos(result.cant_partes_abiertos || 0);
         // Cargar el estado "dont_work" si viene del backend
         setNoTrabajoState(result.state === 'dont_work');
         setShowParts(true);
@@ -398,6 +416,14 @@ export default function Dashboard() {
       setDiaryPartId(null);
       setDiaryPartName('');
       setDiaryPartDate('');
+      setDiaryPartTurno('');
+      setDiaryPartSupervisor('');
+      setDiaryPartFramework('');
+      setDiaryPartResponsable('');
+      setDiaryPartDisciplina('');
+      setDiaryPartArea('');
+      setDiaryPartUbicacion('');
+      setCantPartesAbiertos(0);
       setShowParts(false);
       setPcpData({});
       setObservations('');
@@ -524,6 +550,14 @@ export default function Dashboard() {
       setDiaryPartId(null);
       setDiaryPartName('');
       setDiaryPartDate('');
+      setDiaryPartTurno('');
+      setDiaryPartSupervisor('');
+      setDiaryPartFramework('');
+      setDiaryPartResponsable('');
+      setDiaryPartDisciplina('');
+      setDiaryPartArea('');
+      setDiaryPartUbicacion('');
+      setCantPartesAbiertos(0);
       setShowParts(false);
       setPcpData({});
       setObservations('');
@@ -556,6 +590,24 @@ export default function Dashboard() {
   const handleLogout = () => {
     logout();
     window.location.href = '/';
+  };
+
+  const togglePcpVisibility = (budgetId: number, pcpId: number) => {
+    const key = `${budgetId}-${pcpId}`;
+    setHiddenPcps(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const showAllPcps = () => {
+    setHiddenPcps(new Set());
+    setShowHiddenColumnsMenu(false);
   };
 
   if (isLoading) {
@@ -596,6 +648,21 @@ export default function Dashboard() {
             </div>
             <div className="flex space-x-2">
               <button
+                onClick={handleSaveParts}
+                disabled={savingParts || !hasLocalData()}
+                className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Subir parte al servidor"
+              >
+                <Upload className="h-6 w-6" />
+              </button>
+              <button
+                onClick={() => window.location.href = '/help'}
+                className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                title="Ayuda y tutoriales"
+              >
+                <HelpCircle className="h-6 w-6" />
+              </button>
+              <button
                 onClick={handleHistory}
                 className="relative p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                 title="Ver historial"
@@ -630,24 +697,56 @@ export default function Dashboard() {
         {/* Diary Parts List - Editable Table */}
         {showParts && employees.length > 0 && pcps.length > 0 && (
           <div className="bg-white rounded-2xl shadow-xl p-6 mt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
+            {/* Información del parte */}
+            <div className="mb-6 space-y-3">
+              {/* Framework Contract, Responsable, Parte y Turno */}
+              {diaryPartFramework && (
+                <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                  <div className="flex items-center space-x-4">
+                    <p className="text-sm font-bold text-gray-900">
+                      [{diaryPartFramework}]{diaryPartResponsable && `, RESPONSABLE: ${diaryPartResponsable}`}
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Código del Parte y Turno */}
+              <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <h3 className="text-lg font-bold text-gray-900">
                     {diaryPartName || 'Parte Diario'}
                   </h3>
-                  <p className="text-sm text-gray-600">
-                    {diaryPartDate ? new Date(diaryPartDate).toLocaleDateString('es-ES', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    }) : new Date().toLocaleDateString('es-ES', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                  {diaryPartTurno && (
+                    <div className="px-3 py-1 bg-blue-50 border border-blue-300 rounded">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {diaryPartTurno}
+                      </p>
+                    </div>
+                  )}
+                  {cantPartesAbiertos > 0 && (
+                    <div className="px-3 py-1 bg-orange-50 border border-orange-300 rounded">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Cant Partes: {cantPartesAbiertos}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Disciplina, Área y Ubicación */}
+              {(diaryPartDisciplina || diaryPartArea || diaryPartUbicacion) && (
+                <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                  <p className="text-sm font-bold text-gray-900">
+                    {diaryPartDisciplina && `DISCP: ${diaryPartDisciplina}`}
+                    {diaryPartArea && `, AREA: ${diaryPartArea}`}
+                    {diaryPartUbicacion && `, UBIC: ${diaryPartUbicacion}`}
                   </p>
                 </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-4">
                 
                 {/* Checkbox NO trabajo */}
                 <div className="flex items-center space-x-2 bg-red-50 border-2 border-red-300 px-4 py-2 rounded-lg">
@@ -710,6 +809,21 @@ export default function Dashboard() {
             
             {/* Tabla editable con columnas combinadas de PCP x Presupuesto */}
             <div className="overflow-x-auto">
+              {/* Botón para mostrar columnas ocultas */}
+              {hiddenPcps.size > 0 && (
+                <div className="mb-3 flex items-center justify-end">
+                  <button
+                    onClick={showAllPcps}
+                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center space-x-1"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span>Mostrar {hiddenPcps.size} columna{hiddenPcps.size > 1 ? 's' : ''} oculta{hiddenPcps.size > 1 ? 's' : ''}</span>
+                  </button>
+                </div>
+              )}
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   {/* Primera fila de cabecera: Presupuestos */}
@@ -727,7 +841,7 @@ export default function Dashboard() {
                       <th 
                         key={budget.budget_id} 
                         className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
-                        colSpan={pcps.length}
+                        colSpan={pcps.filter(pcp => !hiddenPcps.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)).length}
                       >
                         {budget.budget_name}
                       </th>
@@ -736,16 +850,30 @@ export default function Dashboard() {
                   {/* Segunda fila de cabecera: PCPs (repetidos por cada presupuesto) */}
                   <tr className="bg-gray-50">
                     {budgets.map((budget) => (
-                      pcps.map((pcp) => (
-                        <th 
-                          key={`${budget.budget_id}-${pcp.bim_pcp_id}`} 
-                          className="border border-gray-300 px-2 py-8 text-center text-xs font-medium text-gray-700 relative"
-                        >
-                          <div className="transform -rotate-90 whitespace-nowrap absolute inset-0 flex items-center justify-center">
-                            {pcp.bim_pcp_name}
-                          </div>
-                        </th>
-                      ))
+                      pcps.map((pcp) => {
+                        const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        const isHidden = hiddenPcps.has(key);
+                        
+                        if (isHidden) return null;
+                        
+                        return (
+                          <th 
+                            key={key}
+                            onClick={() => togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id)}
+                            className="border border-gray-300 px-2 py-8 text-center text-xs font-medium text-gray-700 relative cursor-pointer hover:bg-gray-200 transition-colors group"
+                            title="Clic para ocultar esta columna"
+                          >
+                            <div className="transform -rotate-90 whitespace-nowrap absolute inset-0 flex items-center justify-center">
+                              {pcp.bim_pcp_name}
+                            </div>
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                              </svg>
+                            </div>
+                          </th>
+                        );
+                      })
                     ))}
                   </tr>
                 </thead>
@@ -789,6 +917,11 @@ export default function Dashboard() {
                         {/* Generar celdas para cada combinación de Presupuesto x PCP */}
                         {budgets.map((budget) => (
                           pcps.map((pcp) => {
+                            const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                            const isHidden = hiddenPcps.has(columnKey);
+                            
+                            if (isHidden) return null;
+                            
                             const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                             
                             return (
@@ -822,6 +955,11 @@ export default function Dashboard() {
                     {/* Calcular subtotales para cada combinación de Presupuesto x PCP */}
                     {budgets.map((budget) => (
                       pcps.map((pcp) => {
+                        const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        const isHidden = hiddenPcps.has(columnKey);
+                        
+                        if (isHidden) return null;
+                        
                         // Calcular el subtotal para esta combinación
                         let subtotal = 0;
                         employees.forEach(employee => {
@@ -831,7 +969,7 @@ export default function Dashboard() {
                         });
 
                         return (
-                          <td key={`${budget.budget_id}-${pcp.bim_pcp_id}`} className="border border-gray-300 px-2 py-3 text-center w-16">
+                          <td key={columnKey} className="border border-gray-300 px-2 py-3 text-center w-16">
                             <span className="font-bold text-blue-600">
                               {subtotal.toFixed(1)}h
                             </span>
@@ -843,6 +981,15 @@ export default function Dashboard() {
                 </tfoot>
               </table>
             </div>
+
+            {/* Supervisor */}
+            {diaryPartSupervisor && (
+              <div className="mt-4 p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                <p className="text-sm font-bold text-gray-900">
+                  SUPERVISOR: {diaryPartSupervisor}
+                </p>
+              </div>
+            )}
 
             {/* Observaciones */}
             <div className="mt-6">
