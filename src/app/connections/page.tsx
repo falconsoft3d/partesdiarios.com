@@ -427,6 +427,7 @@ export default function Connections() {
 
         {/* Footer */}
         <div className="mt-8 text-center pb-4">
+          <p className={`text-xs mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>v1.0.0</p>
           <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
             Desarrollado con <a href="https://www.odoo.com" target="_blank" rel="noopener noreferrer" className={`font-semibold hover:underline transition-colors ${isDarkMode ? 'text-gray-300 hover:text-gray-100' : 'text-gray-600 hover:text-gray-800'}`}>Odoo</a> por <a href="https://www.marlonfalcon.com" target="_blank" rel="noopener noreferrer" className={`font-semibold hover:underline transition-colors ${isDarkMode ? 'text-gray-300 hover:text-gray-100' : 'text-gray-600 hover:text-gray-800'}`}>Marlon Falcon</a>
           </p>

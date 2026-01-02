@@ -322,9 +322,7 @@ export default function LoginForm() {
 
           {/* Footer */}
           <div className="mt-6 text-center space-y-2">
-            <p className="text-xs text-gray-500">
-              Versión 1.0.0 • PWA
-            </p>
+            <p className="text-xs text-gray-500 mb-1">v1.0.0</p>
             <p className="text-xs text-gray-600">
               Desarrollado con <a href="https://www.odoo.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Odoo</a> por <a href="https://www.marlonfalcon.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Marlon Falcon</a>
             </p>

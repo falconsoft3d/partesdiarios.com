@@ -2930,6 +2930,7 @@ export default function Dashboard() {
 
         {/* Footer */}
         <div className="mt-8 text-center pb-4">
+          <p className="text-xs text-gray-500 mb-1">v1.0.0</p>
           <p className="text-xs text-gray-600">
             Desarrollado con <a href="https://www.odoo.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Odoo</a> por <a href="https://www.marlonfalcon.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-600 hover:text-gray-800 hover:underline transition-colors">Marlon Falcon</a>
           </p>
