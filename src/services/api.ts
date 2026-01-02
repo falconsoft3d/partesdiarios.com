@@ -478,31 +478,85 @@ class ApiService {
           element_id: number | string;
           odt: number;
           work_breakdown_id: number;
+          work_package_id?: number;
+          work_package_name?: string;
           cantidad: number;
         }> = [];
+
+        // Crear mapas de valores por defecto
+        const defaultWorkBreakdown: {[key: string]: number} = {};
+        const workPackageMap: {[key: string]: {id: number, name: string}} = {};
+        
+        budgets.forEach(budget => {
+          budget.arr_bim_interface?.forEach((bimInterface: any) => {
+            const pcpsArray = bimInterface.pcps || [];
+            pcpsArray.forEach((pcpOrPackage: any, index: number) => {
+              if (pcpOrPackage.work_breakdown && pcpOrPackage.work_breakdown.length > 0) {
+                const pcpId = pcpOrPackage.bim_pcp_id;
+                const defaultWB = pcpOrPackage.work_breakdown[0].work_breakdown_id;
+                
+                // El work_package es el siguiente item en el array
+                const nextIndex = index + 1;
+                if (nextIndex < pcpsArray.length) {
+                  const workPackage = pcpsArray[nextIndex];
+                  const workPackageId = workPackage.work_package_id;
+                  const workPackageName = workPackage.work_package_name;
+                  
+                  if (workPackage.elements) {
+                    workPackage.elements.forEach((element: any) => {
+                      const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpId}-${element.bim_element_id}`;
+                      defaultWorkBreakdown[key] = defaultWB;
+                      if (workPackageId && workPackageName) {
+                        workPackageMap[key] = {id: workPackageId, name: workPackageName};
+                      }
+                    });
+                  }
+                }
+              }
+            });
+          });
+        });
+
+        console.log('🔍 API - defaultWorkBreakdown creado:', defaultWorkBreakdown);
+        console.log('🔍 API - workPackageMap creado:', workPackageMap);
 
         // Procesar elementos originales
         Object.keys(produccionData).forEach(key => {
           const cantidad = produccionData[key];
           const odt = produccionODT?.[key] || 0;
-          const workBreakdownId = produccionDesglosa?.[key];
+          const workBreakdownId = produccionDesglosa?.[key] || defaultWorkBreakdown[key];
+          const workPackageInfo = workPackageMap[key];
+          
+          console.log(`🔍 API - Procesando key: ${key}`, {
+            cantidad,
+            odt,
+            workBreakdownIdGuardado: produccionDesglosa?.[key],
+            workBreakdownIdDefault: defaultWorkBreakdown[key],
+            workBreakdownIdFinal: workBreakdownId,
+            workPackageInfo
+          });
           
           // Key format: budgetId-interfaceId-pcpId-elementId
           const parts = key.split('-');
-          if (parts.length === 4 && (cantidad > 0 || odt > 0)) {
+          if (parts.length === 4 && (cantidad > 0 || odt > 0) && workBreakdownId) {
             const [budgetId, interfaceId, pcpId, elementId] = parts.map(Number);
             
-            if (workBreakdownId) {
-              produccionLines.push({
-                budget_id: budgetId,
-                interface_id: interfaceId,
-                pcp_id: pcpId,
-                element_id: elementId,
-                odt: odt,
-                work_breakdown_id: Number(workBreakdownId),
-                cantidad: cantidad
-              });
+            const line: any = {
+              budget_id: budgetId,
+              interface_id: interfaceId,
+              pcp_id: pcpId,
+              element_id: elementId,
+              odt: odt,
+              work_breakdown_id: Number(workBreakdownId),
+              cantidad: cantidad
+            };
+            
+            if (workPackageInfo) {
+              line.work_package_id = workPackageInfo.id;
+              line.work_package_name = workPackageInfo.name;
             }
+            
+            produccionLines.push(line);
           }
         });
 
@@ -522,10 +576,20 @@ class ApiService {
                     const key = `${budgetId}-${bimInt.bim_interface_id}-${pcpId}-${extraRow.id}`;
                     const cantidad = produccionData?.[key] || 0;
                     const odt = produccionODT?.[key] || 0;
-                    const workBreakdownId = produccionDesglosa?.[key];
+                    const workBreakdownId = produccionDesglosa?.[key] || defaultWorkBreakdown[key];
+                    const workPackageInfo = workPackageMap[key];
+                    
+                    console.log(`🔍 API - Procesando fila extra: ${key}`, {
+                      cantidad,
+                      odt,
+                      workBreakdownIdGuardado: produccionDesglosa?.[key],
+                      workBreakdownIdDefault: defaultWorkBreakdown[key],
+                      workBreakdownIdFinal: workBreakdownId,
+                      workPackageInfo
+                    });
                     
                     if ((cantidad > 0 || odt > 0) && workBreakdownId) {
-                      produccionLines.push({
+                      const line: any = {
                         budget_id: budgetId,
                         interface_id: bimInt.bim_interface_id,
                         pcp_id: pcpId,
@@ -533,7 +597,14 @@ class ApiService {
                         odt: odt,
                         work_breakdown_id: Number(workBreakdownId),
                         cantidad: cantidad
-                      });
+                      };
+                      
+                      if (workPackageInfo) {
+                        line.work_package_id = workPackageInfo.id;
+                        line.work_package_name = workPackageInfo.name;
+                      }
+                      
+                      produccionLines.push(line);
                     }
                   }
                 });
@@ -542,15 +613,17 @@ class ApiService {
           });
         }
 
+        console.log('✅ API - Total líneas de producción:', produccionLines.length);
+        console.log('📦 API - produccion_lines_ids:', JSON.stringify(produccionLines, null, 2));
+
         if (produccionLines.length > 0) {
           diaryPartData.produccion_lines_ids = produccionLines;
         }
       }
 
-      // Procesar horas perdidas de empleados
+      // Procesar horas perdidas de empleados (ahora basado en presupuestos, no empleados)
       if (horasPerdidasEmpleadosData && Object.keys(horasPerdidasEmpleadosData).length > 0) {
         const horasPerdidasEmpleadosLines: Array<{
-          hr_employee_id: number;
           budget_id: number;
           bim_pcp_id: number;
           hora_inicio: number;
@@ -563,10 +636,9 @@ class ApiService {
           const horasPerdidas = horasPerdidasEmpleadosData[key];
           if (horasPerdidas > 0) {
             const parts = key.split('-').map(Number);
-            if (parts.length === 3) {
-              const [employeeId, budgetId, pcpId] = parts;
+            if (parts.length === 2) {
+              const [budgetId, pcpId] = parts;
               horasPerdidasEmpleadosLines.push({
-                hr_employee_id: employeeId,
                 budget_id: budgetId,
                 bim_pcp_id: pcpId,
                 hora_inicio: horasPerdidasEmpleadosHoraInicio?.[key] || 0,

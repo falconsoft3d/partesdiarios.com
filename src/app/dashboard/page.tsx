@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { apiService, PCP, Employee, Equipment, Budget, BimInterface, BimInterfacePcp, WorkBreakdown, BimElement, WorkPackage } from '@/services/api';
-import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle } from 'lucide-react';
+import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle, Lock } from 'lucide-react';
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading, connection, logout } = useAuth();
@@ -71,6 +71,11 @@ export default function Dashboard() {
     }
     return false;
   });
+  
+  // PIN de seguridad
+  const [isLocked, setIsLocked] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
 
   // Escuchar cambios en el tema desde otras páginas
   useEffect(() => {
@@ -195,6 +200,7 @@ export default function Dashboard() {
     
     setLoadingParts(true);
     setError(null);
+    setSaveSuccess(null); // Limpiar mensaje de éxito al cargar nuevo parte
     
     try {
       const result = await apiService.getDiaryParts(
@@ -266,8 +272,8 @@ export default function Dashboard() {
     }));
   };
 
-  const handleHorasPerdidasEmpleadosChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
-    const key = `${employeeId}-${budgetId}-${pcpId}`;
+  const handleHorasPerdidasEmpleadosChange = (budgetId: number, pcpId: number, value: string) => {
+    const key = `${budgetId}-${pcpId}`;
     setHorasPerdidasEmpleadosData(prev => ({
       ...prev,
       [key]: Number(value) || 0
@@ -282,8 +288,8 @@ export default function Dashboard() {
     }));
   };
 
-  const handleHorasPerdidasEmpleadosHoraInicioChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
-    const key = `${employeeId}-${budgetId}-${pcpId}`;
+  const handleHorasPerdidasEmpleadosHoraInicioChange = (budgetId: number, pcpId: number, value: string) => {
+    const key = `${budgetId}-${pcpId}`;
     setHorasPerdidasEmpleadosHoraInicio(prev => ({
       ...prev,
       [key]: Number(value) || 8
@@ -298,8 +304,8 @@ export default function Dashboard() {
     }));
   };
 
-  const handleHorasPerdidasEmpleadosCausaChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
-    const key = `${employeeId}-${budgetId}-${pcpId}`;
+  const handleHorasPerdidasEmpleadosCausaChange = (budgetId: number, pcpId: number, value: string) => {
+    const key = `${budgetId}-${pcpId}`;
     setHorasPerdidasEmpleadosCausa(prev => ({
       ...prev,
       [key]: value
@@ -314,8 +320,8 @@ export default function Dashboard() {
     }));
   };
 
-  const handleHorasPerdidasEmpleadosDescripcionChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
-    const key = `${employeeId}-${budgetId}-${pcpId}`;
+  const handleHorasPerdidasEmpleadosDescripcionChange = (budgetId: number, pcpId: number, value: string) => {
+    const key = `${budgetId}-${pcpId}`;
     setHorasPerdidasEmpleadosDescripcion(prev => ({
       ...prev,
       [key]: value
@@ -720,14 +726,25 @@ export default function Dashboard() {
         // Crear un mapa de valores por defecto de desglose
         const defaultWorkBreakdown: {[key: string]: number} = {};
         budgets.forEach(budget => {
-          budget.interfaces?.forEach(interfaceData => {
-            interfaceData.pcps?.forEach(pcp => {
-              interfaceData.elements?.forEach(element => {
-                const key = `${budget.budget_id}-${interfaceData.interfaceId}-${pcp.bim_pcp_id}-${element.bim_element_id}`;
-                if (interfaceData.workBreakdown && interfaceData.workBreakdown.length > 0) {
-                  defaultWorkBreakdown[key] = interfaceData.workBreakdown[0].work_breakdown_id;
+          budget.arr_bim_interface?.forEach((bimInterface: any) => {
+            const pcpsArray = bimInterface.pcps || [];
+            pcpsArray.forEach((pcpOrPackage: any) => {
+              // Puede ser un PCP (con work_breakdown) o un work_package (con elements)
+              if (pcpOrPackage.work_breakdown && pcpOrPackage.work_breakdown.length > 0) {
+                // Es un PCP con work_breakdown
+                const pcpId = pcpOrPackage.bim_pcp_id;
+                const defaultWB = pcpOrPackage.work_breakdown[0].work_breakdown_id;
+                
+                // Ahora buscar los elementos en el siguiente item del array (work_package)
+                const nextIndex = pcpsArray.indexOf(pcpOrPackage) + 1;
+                if (nextIndex < pcpsArray.length && pcpsArray[nextIndex].elements) {
+                  const workPackage = pcpsArray[nextIndex];
+                  workPackage.elements.forEach((element: any) => {
+                    const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpId}-${element.bim_element_id}`;
+                    defaultWorkBreakdown[key] = defaultWB;
+                  });
                 }
-              });
+              }
             });
           });
         });
@@ -802,15 +819,14 @@ export default function Dashboard() {
         console.log('✅ Total líneas de producción agregadas:', uploadJson.produccion_lines_ids.length);
         console.log('📦 produccion_lines_ids:', JSON.stringify(uploadJson.produccion_lines_ids, null, 2));
 
-        // Agregar horas perdidas de empleados
+        // Agregar horas perdidas de empleados (ahora basado en presupuestos, no empleados)
         Object.keys(horasPerdidasEmpleadosData).forEach(key => {
           const horasPerdidas = horasPerdidasEmpleadosData[key];
           if (horasPerdidas > 0) {
             const parts = key.split('-').map(Number);
-            if (parts.length === 3) {
-              const [employeeId, budgetId, pcpId] = parts;
+            if (parts.length === 2) {
+              const [budgetId, pcpId] = parts;
               uploadJson.horas_perdidas_empleados_ids.push({
-                hr_employee_id: employeeId,
                 budget_id: budgetId,
                 bim_pcp_id: pcpId,
                 hora_inicio: horasPerdidasEmpleadosHoraInicio?.[key] || 0,
@@ -944,6 +960,39 @@ export default function Dashboard() {
     }
   };
 
+  const hasValidationErrors = () => {
+    // Si no hay empleados o pcps cargados, no hay errores
+    if (employees.length === 0 || pcps.length === 0) return false;
+    
+    // Si está marcado "NO trabajo", no hay errores de validación
+    if (noTrabajoState) return false;
+    
+    // Validar cada empleado
+    for (const employee of employees) {
+      const isInasistente = inasistencias[employee.hr_employee_id] || false;
+      
+      // Si no está marcado como inasistente, debe tener al menos una hora > 0
+      if (!isInasistente) {
+        let totalHours = 0;
+        
+        // Sumar horas de todas las combinaciones de presupuesto x PCP
+        for (const budget of budgets) {
+          for (const pcp of pcps) {
+            const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+            const value = pcpData[key] || 0;
+            totalHours += value;
+          }
+        }
+        
+        if (totalHours === 0) {
+          return true; // Hay un error de validación
+        }
+      }
+    }
+    
+    return false; // No hay errores
+  };
+
   const handleSaveParts = async () => {
     if (!connection || employees.length === 0 || pcps.length === 0) return;
     
@@ -979,9 +1028,8 @@ export default function Dashboard() {
           }
         }
 
-        // Si hay errores de validación, mostrarlos y detener el proceso
+        // Si hay errores de validación, detener el proceso (los errores ya se muestran arriba)
         if (validationErrors.length > 0) {
-          setSaveError(`Errores de validación:\n${validationErrors.join('\n')}`);
           return;
         }
       }
@@ -1162,6 +1210,14 @@ export default function Dashboard() {
       setHorasPerdidasEquiposCausa({});
       setHorasPerdidasEmpleadosDescripcion({});
       setHorasPerdidasEquiposDescripcion({});
+      setHorasPerdidasEquiposData({});
+      setHorasPerdidasEquiposHoraInicio({});
+      setHorasPerdidasEquiposCausa({});
+      setHorasPerdidasEquiposDescripcion({});
+      setProduccionData({});
+      setProduccionEstatus({});
+      setProduccionODT({});
+      setProduccionDesglosa({});
       setObservations('');
       setInasistencias({});
       setNoTrabajoState(false);
@@ -1191,6 +1247,40 @@ export default function Dashboard() {
   const handleLogout = () => {
     logout();
     window.location.href = '/';
+  };
+
+  const handleLockApp = () => {
+    if (typeof window !== 'undefined') {
+      const isPinEnabled = localStorage.getItem('security_pin_enabled') === 'true';
+      const savedPin = localStorage.getItem('security_pin');
+      
+      if (isPinEnabled && savedPin) {
+        setIsLocked(true);
+        setPinInput('');
+        setPinError('');
+      }
+    }
+  };
+
+  const handleUnlockAttempt = () => {
+    if (typeof window !== 'undefined') {
+      const savedPin = localStorage.getItem('security_pin');
+      
+      if (pinInput === savedPin) {
+        setIsLocked(false);
+        setPinInput('');
+        setPinError('');
+      } else {
+        setPinError('PIN incorrecto');
+        setPinInput('');
+      }
+    }
+  };
+
+  const handlePinKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleUnlockAttempt();
+    }
   };
 
   const togglePcpVisibility = (budgetId: number, pcpId: number, tableType: 'manoObra' | 'equipos' | 'horasPerdidasEmpleados' | 'horasPerdidasEquipos' = 'manoObra') => {
@@ -1285,6 +1375,68 @@ export default function Dashboard() {
 
   return (
     <div className={`min-h-screen p-4 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100'}`}>
+      {/* Pantalla de bloqueo con PIN */}
+      {isLocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+          <div className={`rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="text-center mb-6">
+              <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDarkMode ? 'bg-yellow-900' : 'bg-yellow-100'}`}>
+                <Lock className={`h-8 w-8 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`} />
+              </div>
+              <h2 className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                Parte Offline Bloqueado
+                <AlertCircle className={`inline-block ml-2 h-6 w-6 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />
+              </h2>
+              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
+                Ingresa tu PIN de 4 dígitos
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={4}
+                value={pinInput}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                  setPinInput(value);
+                  setPinError('');
+                }}
+                onKeyPress={handlePinKeyPress}
+                autoFocus
+                className={`w-full px-4 py-3 border-2 rounded-lg text-center text-2xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  isDarkMode 
+                    ? 'bg-gray-700 border-gray-600 text-white' 
+                    : 'bg-white border-gray-300 text-gray-900'
+                } ${pinError ? 'border-red-500' : ''}`}
+                placeholder="••••"
+              />
+              {pinError && (
+                <p className="text-red-500 text-sm text-center mt-2">{pinError}</p>
+              )}
+            </div>
+
+            <button
+              onClick={handleUnlockAttempt}
+              disabled={pinInput.length !== 4}
+              className={`w-full py-3 px-6 rounded-lg font-medium transition-colors ${
+                pinInput.length === 4
+                  ? isDarkMode 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  : isDarkMode
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              Desbloquear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className={`rounded-2xl shadow-xl p-6 mb-6 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
@@ -1310,7 +1462,7 @@ export default function Dashboard() {
             <div className="flex space-x-2">
               <button
                 onClick={handleSaveParts}
-                disabled={savingParts || !hasLocalData()}
+                disabled={savingParts || !hasLocalData() || hasValidationErrors()}
                 className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
                 title="Subir parte al servidor"
               >
@@ -1345,6 +1497,15 @@ export default function Dashboard() {
               >
                 <Settings className="h-6 w-6" />
               </button>
+              {typeof window !== 'undefined' && localStorage.getItem('security_pin_enabled') === 'true' && (
+                <button
+                  onClick={handleLockApp}
+                  className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-yellow-400 hover:bg-gray-700' : 'text-gray-600 hover:text-yellow-600 hover:bg-yellow-50'}`}
+                  title="Bloquear con PIN"
+                >
+                  <Lock className="h-6 w-6" />
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-red-400 hover:bg-gray-700' : 'text-gray-600 hover:text-red-600 hover:bg-red-50'}`}
@@ -2451,18 +2612,7 @@ export default function Dashboard() {
               </div>
             )}
             
-            {saveSuccess && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-start">
-                  <svg className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-green-700 text-sm whitespace-pre-line">{saveSuccess}</span>
-                </div>
-              </div>
-            )}
-            
-            {/* Tabla de Horas Perdidas - Empleados */}
+            {/* Tabla de Horas Perdidas - Presupuestos */}
             <div className="overflow-x-auto mb-6">
               <div className="mb-3 flex items-center justify-end">
                 {hiddenPcpsHorasPerdidasEmpleados.size > 0 && (
@@ -2474,216 +2624,174 @@ export default function Dashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
-                    <span>Mostrar {hiddenPcpsHorasPerdidasEmpleados.size} columna{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''} oculta{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''}</span>
+                    <span>Mostrar {hiddenPcpsHorasPerdidasEmpleados.size} PCP{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''} oculto{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''}</span>
                   </button>
                 )}
               </div>
-                <table className="w-full border-collapse border border-gray-300">
+
+                <table className={`w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
                   <thead>
-                    <tr className="bg-blue-50">
-                      <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
-                        Nombre
+                    <tr className={isDarkMode ? 'bg-gray-700' : 'bg-blue-50'}>
+                      <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-4 py-3 text-left text-sm font-medium`}>
+                        Presupuesto
                       </th>
-                      {budgets.map((budget) => {
-                        const visiblePcpsCount = pcps.filter(pcp => !hiddenPcpsHorasPerdidasEmpleados.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)).length;
-                        if (visiblePcpsCount === 0) return null;
+                      {pcps.map((pcp, index) => {
+                        // Verificar si hay al menos un presupuesto donde este PCP no esté oculto
+                        const isVisibleInAnyBudget = budgets.some(budget => 
+                          !hiddenPcpsHorasPerdidasEmpleados.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)
+                        );
+                        
+                        if (!isVisibleInAnyBudget) return null;
                         
                         return (
                           <th 
-                            key={budget.budget_id} 
-                            className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
-                            colSpan={visiblePcpsCount * 4}
+                            key={`${pcp.bim_pcp_id}-group`} 
+                            className={`border ${isDarkMode ? 'border-gray-600 text-gray-200 bg-gray-600' : 'border-gray-300 text-gray-700 bg-blue-100'} px-2 py-2 text-center text-xs font-medium`} 
+                            colSpan={4}
                           >
-                            {budget.budget_name}
+                            {pcp.bim_pcp_name}
                           </th>
                         );
                       })}
-                      <th className="border border-gray-300 px-4 py-3 text-center text-sm font-medium text-gray-700" rowSpan={2}>
-                        Total
-                      </th>
                     </tr>
-                    <tr className="bg-gray-50">
-                      {budgets.map((budget) => (
-                        pcps.map((pcp) => {
-                          const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                          const isHidden = hiddenPcpsHorasPerdidasEmpleados.has(key);
-                          
-                          if (isHidden) return null;
-                          
-                          return (
-                            <Fragment key={key}>
-                              <th 
-                                key={`${key}-horas`}
-                                className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 relative group"
-                              >
-                                <div className="whitespace-nowrap">
-                                  {pcp.bim_pcp_name}
-                                </div>
-                                <div className="text-xs text-gray-500 font-normal">Horas</div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                    <tr className={isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}>
+                      <th className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}></th>
+                      {pcps.map((pcp) => {
+                        // Verificar si hay al menos un presupuesto donde este PCP no esté oculto
+                        const isVisibleInAnyBudget = budgets.some(budget => 
+                          !hiddenPcpsHorasPerdidasEmpleados.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)
+                        );
+                        
+                        if (!isVisibleInAnyBudget) return null;
+                        
+                        return (
+                          <Fragment key={`${pcp.bim_pcp_id}-headers`}>
+                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium relative group`}>
+                              Horas
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Ocultar este PCP para todos los presupuestos
+                                  budgets.forEach(budget => {
                                     togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id, 'horasPerdidasEmpleados');
-                                  }}
-                                  className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5"
-                                  title="Clic para ocultar esta columna"
-                                >
-                                  <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                  </svg>
-                                </button>
-                              </th>
-                              <th key={`${key}-inicio`} className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
-                                Hora Inicio
-                              </th>
-                              <th key={`${key}-causa`} className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
-                                Causa
-                              </th>
-                              <th key={`${key}-desc`} className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
-                                Descripción
-                              </th>
-                            </Fragment>
-                          );
-                        })
-                      ))}
+                                  });
+                                }}
+                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5"
+                                title="Clic para ocultar este PCP"
+                              >
+                                <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                </svg>
+                              </button>
+                            </th>
+                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium`}>
+                              Hora Inicio
+                            </th>
+                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium`}>
+                              Causa
+                            </th>
+                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium`}>
+                              Descripción
+                            </th>
+                          </Fragment>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {employees.map((employee, index) => {
-                      let totalHours = 0;
-                      budgets.forEach(budget => {
-                        pcps.forEach(pcp => {
-                          const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
-                          const value = horasPerdidasEmpleadosData[key] || 0;
-                          totalHours += value;
-                        });
-                      });
-                      
-                      return (
-                        <tr key={employee.hr_employee_id} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900">
-                            {employee.hr_employee_name}
-                          </td>
-                          {budgets.map((budget) => (
-                            pcps.map((pcp) => {
-                              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
-                              const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                              const isHidden = hiddenPcpsHorasPerdidasEmpleados.has(columnKey);
-                              
-                              if (isHidden) return null;
-                              
-                              return (
-                                <Fragment key={key}>
-                                  <td key={`${key}-horas`} className="border border-gray-300 px-2 py-2">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.5"
-                                      value={horasPerdidasEmpleadosData[key] || ''}
-                                      onChange={(e) => handleHorasPerdidasEmpleadosChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                      className={`w-full px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                        (horasPerdidasEmpleadosData[key] || 0) > 0 
-                                          ? 'bg-red-100' 
-                                          : 'bg-white'
-                                      }`}
-                                      placeholder=""
-                                    />
-                                  </td>
-                                  <td key={`${key}-inicio`} className="border border-gray-300 px-2 py-2">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max="23"
-                                      step="1"
-                                      value={horasPerdidasEmpleadosHoraInicio[key] || 8}
-                                      onChange={(e) => handleHorasPerdidasEmpleadosHoraInicioChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                      placeholder="8"
-                                    />
-                                  </td>
-                                  <td key={`${key}-causa`} className="border border-gray-300 px-2 py-2">
-                                    <select
-                                      value={horasPerdidasEmpleadosCausa[key] || ''}
-                                      onChange={(e) => handleHorasPerdidasEmpleadosCausaChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    >
-                                      <option value="">Seleccionar...</option>
-                                      <option value="Falta de Equipo">Falta de Equipo</option>
-                                      <option value="Seguridad">Seguridad</option>
-                                      <option value="Otros">Otros</option>
-                                      <option value="Orden del cliente">Orden del cliente</option>
-                                      <option value="Falta de Materiales">Falta de Materiales</option>
-                                      <option value="Lluvia">Lluvia</option>
-                                      <option value="Inundación">Inundación</option>
-                                      <option value="Falta de Andamios">Falta de Andamios</option>
-                                      <option value="Alerta Roja">Alerta Roja</option>
-                                    </select>
-                                  </td>
-                                  <td key={`${key}-desc`} className="border border-gray-300 px-2 py-2">
-                                    <input
-                                      type="text"
-                                      value={horasPerdidasEmpleadosDescripcion[key] || ''}
-                                      onChange={(e) => handleHorasPerdidasEmpleadosDescripcionChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                      placeholder="Descripción..."
-                                    />
-                                  </td>
-                                </Fragment>
-                              );
-                            })
-                          ))}
-                          <td className="border border-gray-300 px-4 py-2 text-center text-sm font-bold text-gray-900">
-                            {totalHours.toFixed(1)}h
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-gray-100 font-semibold">
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
-                        Subtotal (horas):
-                      </td>
-                      {budgets.map((budget) => (
-                        pcps.map((pcp) => {
-                          const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                          const isHidden = hiddenPcpsHorasPerdidasEmpleados.has(columnKey);
+                    {budgets.map((budget) => (
+                      <tr key={budget.budget_id} className={isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
+                        <td className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-900'} px-4 py-2 text-sm font-medium`}>
+                          {budget.budget_name}
+                        </td>
+                        {pcps.map((pcp) => {
+                          const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
                           
-                          if (isHidden) return null;
+                          // Verificar si hay al menos un presupuesto donde este PCP no esté oculto
+                          const isVisibleInAnyBudget = budgets.some(b => 
+                            !hiddenPcpsHorasPerdidasEmpleados.has(`${b.budget_id}-${pcp.bim_pcp_id}`)
+                          );
                           
-                          let subtotal = 0;
-                          employees.forEach(employee => {
-                            const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
-                            subtotal += horasPerdidasEmpleadosData[key] || 0;
-                          });
+                          if (!isVisibleInAnyBudget) return null;
                           
                           return (
-                            <Fragment key={columnKey}>
-                              <td key={`${columnKey}-horas`} className="border border-gray-300 px-2 py-2 text-center">
-                                <span className="text-xs font-bold text-red-700">
-                                  {subtotal.toFixed(1)}h
-                                </span>
+                            <Fragment key={key}>
+                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  value={horasPerdidasEmpleadosData[key] || ''}
+                                  onChange={(e) => handleHorasPerdidasEmpleadosChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  className={`w-24 px-2 py-1 border rounded text-center text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                    isDarkMode 
+                                      ? (horasPerdidasEmpleadosData[key] || 0) > 0 
+                                        ? 'bg-red-900 border-gray-600 text-white' 
+                                        : 'bg-gray-700 border-gray-600 text-white'
+                                      : (horasPerdidasEmpleadosData[key] || 0) > 0 
+                                        ? 'bg-red-100 border-gray-300 text-gray-900' 
+                                        : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  placeholder=""
+                                />
                               </td>
-                              <td key={`${columnKey}-inicio`} className="border border-gray-300 px-2 py-2 text-center">
-                                <span className="text-xs text-gray-500">-</span>
+                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="23"
+                                  step="1"
+                                  value={horasPerdidasEmpleadosHoraInicio[key] || 8}
+                                  onChange={(e) => handleHorasPerdidasEmpleadosHoraInicioChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  className={`w-16 px-2 py-1 border rounded text-center text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                    isDarkMode 
+                                      ? 'bg-gray-700 border-gray-600 text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  placeholder="8"
+                                />
                               </td>
-                              <td key={`${columnKey}-causa`} className="border border-gray-300 px-2 py-2 text-center">
-                                <span className="text-xs text-gray-500">-</span>
+                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                                <select
+                                  value={horasPerdidasEmpleadosCausa[key] || ''}
+                                  onChange={(e) => handleHorasPerdidasEmpleadosCausaChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                    isDarkMode 
+                                      ? 'bg-gray-700 border-gray-600 text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                >
+                                  <option value="">Seleccionar...</option>
+                                  <option value="Falta de Equipo">Falta de Equipo</option>
+                                  <option value="Seguridad">Seguridad</option>
+                                  <option value="Otros">Otros</option>
+                                  <option value="Orden del cliente">Orden del cliente</option>
+                                  <option value="Falta de Materiales">Falta de Materiales</option>
+                                  <option value="Lluvia">Lluvia</option>
+                                  <option value="Inundación">Inundación</option>
+                                  <option value="Falta de Andamios">Falta de Andamios</option>
+                                  <option value="Alerta Roja">Alerta Roja</option>
+                                </select>
                               </td>
-                              <td key={`${columnKey}-desc`} className="border border-gray-300 px-2 py-2 text-center">
-                                <span className="text-xs text-gray-500">-</span>
+                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                                <input
+                                  type="text"
+                                  value={horasPerdidasEmpleadosDescripcion[key] || ''}
+                                  onChange={(e) => handleHorasPerdidasEmpleadosDescripcionChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                    isDarkMode 
+                                      ? 'bg-gray-700 border-gray-600 text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  placeholder="Descripción..."
+                                />
                               </td>
                             </Fragment>
                           );
-                        })
-                      ))}
-                      <td className="border border-gray-300 px-4 py-2 text-center">
-                        <span className="text-xs font-bold text-gray-700">
-                          -
-                        </span>
-                      </td>
-                    </tr>
-                  </tfoot>
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
 
@@ -2790,20 +2898,6 @@ export default function Dashboard() {
             <p className="text-gray-600 mb-6">
               Guarda y sincroniza los datos modificados del parte diario al servidor.
             </p>
-            {saveError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start">
-                  <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
-                  <div className="text-red-700 text-sm">
-                    {saveError.split('\n').map((line, index) => (
-                      <div key={index} className={index > 0 ? 'mt-1' : ''}>
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
             {saveSuccess && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                 <div className="flex items-start">

@@ -15,6 +15,20 @@ export default function Connections() {
     }
     return false;
   });
+  
+  // PIN de seguridad
+  const [isPinEnabled, setIsPinEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('security_pin_enabled');
+      return saved === 'true';
+    }
+    return false;
+  });
+  const [showPinConfig, setShowPinConfig] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [showCurrentPin, setShowCurrentPin] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -28,6 +42,59 @@ export default function Connections() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('theme_mode', newMode ? 'dark' : 'light');
     }
+  };
+
+  const handleTogglePin = () => {
+    if (isPinEnabled) {
+      // Desactivar PIN
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('security_pin');
+        localStorage.setItem('security_pin_enabled', 'false');
+      }
+      setIsPinEnabled(false);
+      setShowPinConfig(false);
+      setNewPin('');
+      setConfirmPin('');
+      setPinError('');
+    } else {
+      // Activar PIN - mostrar formulario
+      setShowPinConfig(true);
+      setNewPin('');
+      setConfirmPin('');
+      setPinError('');
+    }
+  };
+
+  const handleSavePin = () => {
+    // Validar PIN
+    if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+      setPinError('El PIN debe tener exactamente 4 dígitos');
+      return;
+    }
+    
+    if (newPin !== confirmPin) {
+      setPinError('Los PINs no coinciden');
+      return;
+    }
+
+    // Guardar PIN
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('security_pin', newPin);
+      localStorage.setItem('security_pin_enabled', 'true');
+    }
+    
+    setIsPinEnabled(true);
+    setShowPinConfig(false);
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
+  };
+
+  const handleCancelPin = () => {
+    setShowPinConfig(false);
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
   };
 
   const handleBackToDashboard = () => {
@@ -167,6 +234,149 @@ export default function Connections() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Security Settings Card */}
+        <div className={`rounded-2xl shadow-xl p-6 mb-6 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Configuración de Seguridad
+          </h2>
+          
+          {/* PIN Toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                PIN de Bloqueo
+              </label>
+              <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Protege el acceso con un PIN de 4 dígitos
+              </p>
+            </div>
+            <button
+              onClick={handleTogglePin}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                isPinEnabled 
+                  ? 'bg-blue-600 focus:ring-blue-500' 
+                  : isDarkMode 
+                    ? 'bg-gray-600 focus:ring-gray-500' 
+                    : 'bg-gray-200 focus:ring-gray-400'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isPinEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* PIN Configuration Form */}
+          {showPinConfig && (
+            <div className={`border rounded-lg p-4 mt-4 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <p className={`text-sm font-medium mb-3 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                Configurar nuevo PIN
+              </p>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Nuevo PIN (4 dígitos)
+                  </label>
+                  <input
+                    type="number"
+                    maxLength={4}
+                    value={newPin}
+                    onChange={(e) => {
+                      const value = e.target.value.slice(0, 4);
+                      setNewPin(value);
+                      setPinError('');
+                    }}
+                    className={`w-full px-3 py-2 border rounded-lg text-center text-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-600 text-white' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    placeholder="••••"
+                  />
+                </div>
+                
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Confirmar PIN
+                  </label>
+                  <input
+                    type="number"
+                    maxLength={4}
+                    value={confirmPin}
+                    onChange={(e) => {
+                      const value = e.target.value.slice(0, 4);
+                      setConfirmPin(value);
+                      setPinError('');
+                    }}
+                    className={`w-full px-3 py-2 border rounded-lg text-center text-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-600 text-white' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    placeholder="••••"
+                  />
+                </div>
+
+                {pinError && (
+                  <p className="text-xs text-red-500 mt-1">{pinError}</p>
+                )}
+
+                <div className="flex space-x-2 mt-4">
+                  <button
+                    onClick={handleSavePin}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-colors ${
+                      isDarkMode 
+                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    Guardar PIN
+                  </button>
+                  <button
+                    onClick={handleCancelPin}
+                    className={`flex-1 border py-2 px-4 rounded-lg font-medium text-sm transition-colors ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' 
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Current PIN Display (when enabled) */}
+          {isPinEnabled && !showPinConfig && (
+            <div className={`border rounded-lg p-3 mt-3 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className={`block text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    PIN Actual
+                  </label>
+                  <p className={`font-mono text-lg ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                    {showCurrentPin ? localStorage.getItem('security_pin') : '••••'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCurrentPin(!showCurrentPin)}
+                  className={`p-2 ${isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  {showCurrentPin ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
