@@ -11,10 +11,8 @@ const nextConfig = {
     // ⚠️ Esto permite el build incluso con errores de TypeScript
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // ⚠️ Esto permite el build incluso con errores de ESLint
-    ignoreDuringBuilds: true,
-  },
+  // Configuración para Next.js 16 con Turbopack
+  turbopack: {},
 };
 
 module.exports = withPWA(nextConfig);
