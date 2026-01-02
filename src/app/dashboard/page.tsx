@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { apiService, PCP, Employee, Equipment, Budget } from '@/services/api';
+import { apiService, PCP, Employee, Equipment, Budget, BimInterface, BimInterfacePcp, WorkBreakdown, BimElement, WorkPackage } from '@/services/api';
 import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle } from 'lucide-react';
 
 export default function Dashboard() {
@@ -37,8 +37,53 @@ export default function Dashboard() {
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [hiddenPcpsManoObra, setHiddenPcpsManoObra] = useState<Set<string>>(new Set());
   const [hiddenPcpsEquipos, setHiddenPcpsEquipos] = useState<Set<string>>(new Set());
+  const [hiddenPcpsHorasPerdidasEmpleados, setHiddenPcpsHorasPerdidasEmpleados] = useState<Set<string>>(new Set());
+  const [hiddenPcpsHorasPerdidasEquipos, setHiddenPcpsHorasPerdidasEquipos] = useState<Set<string>>(new Set());
   const [showHiddenColumnsMenu, setShowHiddenColumnsMenu] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'manoObra' | 'equipos'>('manoObra');
+  const [activeTab, setActiveTab] = useState<'manoObra' | 'equipos' | 'produccion' | 'horasPerdidas'>('manoObra');
+  const [horasPerdidasTab, setHorasPerdidasTab] = useState<'empleados' | 'equipos'>('empleados');
+  const [horasPerdidasEmpleadosData, setHorasPerdidasEmpleadosData] = useState<{[key: string]: number}>({});
+  const [horasPerdidasEquiposData, setHorasPerdidasEquiposData] = useState<{[key: string]: number}>({});
+  const [horasPerdidasEmpleadosHoraInicio, setHorasPerdidasEmpleadosHoraInicio] = useState<{[key: string]: number}>({});
+  const [horasPerdidasEquiposHoraInicio, setHorasPerdidasEquiposHoraInicio] = useState<{[key: string]: number}>({});
+  const [horasPerdidasEmpleadosCausa, setHorasPerdidasEmpleadosCausa] = useState<{[key: string]: string}>({});
+  const [horasPerdidasEquiposCausa, setHorasPerdidasEquiposCausa] = useState<{[key: string]: string}>({});
+  const [horasPerdidasEmpleadosDescripcion, setHorasPerdidasEmpleadosDescripcion] = useState<{[key: string]: string}>({});
+  const [horasPerdidasEquiposDescripcion, setHorasPerdidasEquiposDescripcion] = useState<{[key: string]: string}>({});
+  const [produccionData, setProduccionData] = useState<{[key: string]: number}>({});
+  const [produccionEstatus, setProduccionEstatus] = useState<{[key: string]: string}>({});
+  const [produccionODT, setProduccionODT] = useState<{[key: string]: number}>({});
+  const [produccionDesglosa, setProduccionDesglosa] = useState<{[key: string]: number}>({});
+  const [collapsedProduccionTables, setCollapsedProduccionTables] = useState<Set<string>>(new Set());
+  const [produccionExtraRows, setProduccionExtraRows] = useState<{[tableKey: string]: Array<{id: string; elementId: number}>}>({});
+  const [allInasistenciasChecked, setAllInasistenciasChecked] = useState(false);
+  const [isPartInfoCollapsed, setIsPartInfoCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('part_info_collapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme_mode');
+      return saved === 'dark';
+    }
+    return false;
+  });
+
+  // Escuchar cambios en el tema desde otras páginas
+  useEffect(() => {
+    const handleStorageChange = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('theme_mode');
+        setIsDarkMode(saved === 'dark');
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -91,6 +136,19 @@ export default function Dashboard() {
         cantPartesAbiertos,
         pcpData,
         equipmentData,
+        horasPerdidasEmpleadosData,
+        horasPerdidasEquiposData,
+        horasPerdidasEmpleadosHoraInicio,
+        horasPerdidasEquiposHoraInicio,
+        horasPerdidasEmpleadosCausa,
+        horasPerdidasEquiposCausa,
+        horasPerdidasEmpleadosDescripcion,
+        horasPerdidasEquiposDescripcion,
+        horasPerdidasTab,
+        produccionData,
+        produccionEstatus,
+        produccionODT,
+        produccionDesglosa,
         observations,
         inasistencias,
         noTrabajoState,
@@ -99,7 +157,7 @@ export default function Dashboard() {
       };
       localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
     }
-  }, [pcps, employees, equipments, budgets, diaryPartId, diaryPartName, diaryPartDate, diaryPartTurno, diaryPartSupervisor, diaryPartFramework, diaryPartResponsable, diaryPartDisciplina, diaryPartArea, diaryPartUbicacion, cantPartesAbiertos, pcpData, equipmentData, observations, inasistencias, noTrabajoState, attachments]);
+  }, [pcps, employees, equipments, budgets, diaryPartId, diaryPartName, diaryPartDate, diaryPartTurno, diaryPartSupervisor, diaryPartFramework, diaryPartResponsable, diaryPartDisciplina, diaryPartArea, diaryPartUbicacion, cantPartesAbiertos, pcpData, equipmentData, horasPerdidasEmpleadosData, horasPerdidasEquiposData, horasPerdidasEmpleadosHoraInicio, horasPerdidasEquiposHoraInicio, horasPerdidasEmpleadosCausa, horasPerdidasEquiposCausa, horasPerdidasEmpleadosDescripcion, horasPerdidasEquiposDescripcion, horasPerdidasTab, produccionData, produccionEstatus, produccionODT, produccionDesglosa, observations, inasistencias, noTrabajoState, attachments]);
 
   // Cargar datos del localStorage al montar el componente
   useEffect(() => {
@@ -111,7 +169,26 @@ export default function Dashboard() {
     if (employees.length > 0 || pcps.length > 0) {
       saveToLocalStorage();
     }
-  }, [employees, equipments, pcps, pcpData, equipmentData, observations, saveToLocalStorage]);
+  }, [employees, equipments, pcps, pcpData, equipmentData, horasPerdidasEmpleadosData, horasPerdidasEquiposData, horasPerdidasEmpleadosHoraInicio, horasPerdidasEquiposHoraInicio, horasPerdidasEmpleadosCausa, horasPerdidasEquiposCausa, horasPerdidasEmpleadosDescripcion, horasPerdidasEquiposDescripcion, observations, saveToLocalStorage]);
+
+  // Ocultar PCPs por defecto en Horas Perdidas (excepto el primero)
+  useEffect(() => {
+    if (pcps.length > 0 && budgets.length > 0) {
+      const hiddenKeys = new Set<string>();
+      
+      budgets.forEach(budget => {
+        pcps.forEach((pcp, index) => {
+          // Ocultar todos excepto el primero
+          if (index > 0) {
+            hiddenKeys.add(`${budget.budget_id}-${pcp.bim_pcp_id}`);
+          }
+        });
+      });
+      
+      setHiddenPcpsHorasPerdidasEmpleados(hiddenKeys);
+      setHiddenPcpsHorasPerdidasEquipos(new Set(hiddenKeys));
+    }
+  }, [pcps, budgets]);
 
   const handleLoadPart = async () => {
     if (!connection) return;
@@ -189,6 +266,115 @@ export default function Dashboard() {
     }));
   };
 
+  const handleHorasPerdidasEmpleadosChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
+    const key = `${employeeId}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEmpleadosData(prev => ({
+      ...prev,
+      [key]: Number(value) || 0
+    }));
+  };
+
+  const handleHorasPerdidasEquiposChange = (licensePlate: string, budgetId: number, pcpId: number, value: string) => {
+    const key = `${licensePlate}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEquiposData(prev => ({
+      ...prev,
+      [key]: Number(value) || 0
+    }));
+  };
+
+  const handleHorasPerdidasEmpleadosHoraInicioChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
+    const key = `${employeeId}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEmpleadosHoraInicio(prev => ({
+      ...prev,
+      [key]: Number(value) || 8
+    }));
+  };
+
+  const handleHorasPerdidasEquiposHoraInicioChange = (licensePlate: string, budgetId: number, pcpId: number, value: string) => {
+    const key = `${licensePlate}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEquiposHoraInicio(prev => ({
+      ...prev,
+      [key]: Number(value) || 8
+    }));
+  };
+
+  const handleHorasPerdidasEmpleadosCausaChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
+    const key = `${employeeId}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEmpleadosCausa(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleHorasPerdidasEquiposCausaChange = (licensePlate: string, budgetId: number, pcpId: number, value: string) => {
+    const key = `${licensePlate}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEquiposCausa(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleHorasPerdidasEmpleadosDescripcionChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
+    const key = `${employeeId}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEmpleadosDescripcion(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleHorasPerdidasEquiposDescripcionChange = (licensePlate: string, budgetId: number, pcpId: number, value: string) => {
+    const key = `${licensePlate}-${budgetId}-${pcpId}`;
+    setHorasPerdidasEquiposDescripcion(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleProduccionChange = (budgetId: number, interfaceId: number, pcpId: number, elementId: number, value: string) => {
+    const key = `${budgetId}-${interfaceId}-${pcpId}-${elementId}`;
+    setProduccionData(prev => ({
+      ...prev,
+      [key]: Number(value) || 0
+    }));
+  };
+
+  const handleProduccionEstatusChange = (budgetId: number, interfaceId: number, pcpId: number, elementId: number, value: string) => {
+    const key = `${budgetId}-${interfaceId}-${pcpId}-${elementId}`;
+    setProduccionEstatus(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleProduccionODTChange = (budgetId: number, interfaceId: number, pcpId: number, elementId: number, value: string) => {
+    const key = `${budgetId}-${interfaceId}-${pcpId}-${elementId}`;
+    setProduccionODT(prev => ({
+      ...prev,
+      [key]: Number(value) || 0
+    }));
+  };
+
+  const handleProduccionDesglosaChange = (budgetId: number, interfaceId: number, pcpId: number, elementId: number, value: string) => {
+    const key = `${budgetId}-${interfaceId}-${pcpId}-${elementId}`;
+    setProduccionDesglosa(prev => ({
+      ...prev,
+      [key]: Number(value) || 0
+    }));
+  };
+
+  const toggleProduccionTable = (budgetId: number, pcpId: number) => {
+    const key = `${budgetId}-${pcpId}`;
+    setCollapsedProduccionTables(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
   const handleObservationChange = (value: string) => {
     setObservations(value);
   };
@@ -202,6 +388,30 @@ export default function Dashboard() {
       ...prev,
       [employeeId]: value
     }));
+  };
+
+  const handleToggleAllInasistencias = () => {
+    const newValue = !allInasistenciasChecked;
+    const newInasistencias: {[key: number]: boolean} = {};
+    
+    employees.forEach(employee => {
+      // Verificar si este empleado tiene horas asignadas en algún PCP
+      const hasHoras = Object.keys(pcpData).some(key => {
+        const [empId] = key.split('-');
+        return parseInt(empId) === employee.hr_employee_id && pcpData[key] > 0;
+      });
+      
+      // Solo marcar/desmarcar si el empleado NO tiene horas asignadas
+      if (!hasHoras) {
+        newInasistencias[employee.hr_employee_id] = newValue;
+      } else {
+        // Mantener el valor actual si tiene horas
+        newInasistencias[employee.hr_employee_id] = inasistencias[employee.hr_employee_id] || false;
+      }
+    });
+    
+    setInasistencias(newInasistencias);
+    setAllInasistenciasChecked(newValue);
   };
 
   const handleNoTrabajoChange = (value: boolean) => {
@@ -259,6 +469,19 @@ export default function Dashboard() {
           setCantPartesAbiertos(parsed.cantPartesAbiertos || 0);
           setPcpData(parsed.pcpData || {});
           setEquipmentData(parsed.equipmentData || {});
+          setHorasPerdidasEmpleadosData(parsed.horasPerdidasEmpleadosData || {});
+          setHorasPerdidasEquiposData(parsed.horasPerdidasEquiposData || {});
+          setHorasPerdidasEmpleadosHoraInicio(parsed.horasPerdidasEmpleadosHoraInicio || {});
+          setHorasPerdidasEquiposHoraInicio(parsed.horasPerdidasEquiposHoraInicio || {});
+          setHorasPerdidasEmpleadosCausa(parsed.horasPerdidasEmpleadosCausa || {});
+          setHorasPerdidasEquiposCausa(parsed.horasPerdidasEquiposCausa || {});
+          setHorasPerdidasEmpleadosDescripcion(parsed.horasPerdidasEmpleadosDescripcion || {});
+          setHorasPerdidasEquiposDescripcion(parsed.horasPerdidasEquiposDescripcion || {});
+          setHorasPerdidasTab(parsed.horasPerdidasTab || 'empleados');
+          setProduccionData(parsed.produccionData || {});
+          setProduccionEstatus(parsed.produccionEstatus || {});
+          setProduccionODT(parsed.produccionODT || {});
+          setProduccionDesglosa(parsed.produccionDesglosa || {});
           setObservations(parsed.observations || '');
           setInasistencias(parsed.inasistencias || {});
           setNoTrabajoState(parsed.noTrabajoState || false);
@@ -402,6 +625,225 @@ export default function Dashboard() {
           textData += `\nARCHIVO ADJUNTO: ${attachments.name}\n`;
         }
 
+        // Preparar JSON de bajada (datos recibidos del servidor)
+        const downloadJson = {
+          part_id: diaryPartId,
+          date: diaryPartDate,
+          part_name: diaryPartName,
+          pcps: pcps,
+          employees: employees,
+          equipments: equipments,
+          budgets: budgets,
+          turno: diaryPartTurno,
+          framework_contract_id: diaryPartFramework,
+          responsable: diaryPartResponsable,
+          supervisor: diaryPartSupervisor,
+          diciplina: diaryPartDisciplina,
+          area: diaryPartArea,
+          ubicacion: diaryPartUbicacion
+        };
+
+        // Preparar JSON de subida (datos enviados al servidor)
+        const uploadJson = {
+          id: diaryPartId,
+          observation: observations || '',
+          employee_lines_ids: [],
+          equipment_lines_ids: [],
+          produccion_lines_ids: [],
+          horas_perdidas_empleados_ids: [],
+          horas_perdidas_equipos_ids: [],
+          state: noTrabajoState ? 'dont_work' : undefined
+        };
+
+        // Agregar líneas de empleados
+        employees.forEach(employee => {
+          const isInasistente = inasistencias[employee.hr_employee_id] || false;
+          
+          if (isInasistente) {
+            if (budgets.length > 0 && pcps.length > 0) {
+              uploadJson.employee_lines_ids.push({
+                hr_employee_id: employee.hr_employee_id,
+                bim_resource_id: false,
+                budget_id: budgets[0].budget_id,
+                bim_pcp_id: pcps[0].bim_pcp_id,
+                hh: 0,
+                i: true
+              });
+            }
+          } else {
+            budgets.forEach(budget => {
+              pcps.forEach(pcp => {
+                const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                const hours = pcpData[key] || 0;
+                
+                if (hours > 0) {
+                  uploadJson.employee_lines_ids.push({
+                    hr_employee_id: employee.hr_employee_id,
+                    bim_resource_id: false,
+                    budget_id: budget.budget_id,
+                    bim_pcp_id: pcp.bim_pcp_id,
+                    hh: hours,
+                    i: false
+                  });
+                }
+              });
+            });
+          }
+        });
+
+        // Agregar líneas de equipos
+        equipments.forEach(equipment => {
+          budgets.forEach(budget => {
+            pcps.forEach(pcp => {
+              const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const hours = equipmentData[key] || 0;
+              
+              if (hours > 0) {
+                uploadJson.equipment_lines_ids.push({
+                  equipment_name: equipment.name,
+                  license_plate: equipment.license_plate,
+                  budget_id: budget.budget_id,
+                  bim_pcp_id: pcp.bim_pcp_id,
+                  hh: hours
+                });
+              }
+            });
+          });
+        });
+
+        // Agregar líneas de producción - elementos base
+        console.log('🔍 DEBUG produccionData:', produccionData);
+        console.log('🔍 DEBUG produccionODT:', produccionODT);
+        console.log('🔍 DEBUG produccionDesglosa:', produccionDesglosa);
+        console.log('🔍 DEBUG produccionExtraRows:', produccionExtraRows);
+        
+        // Crear un mapa de valores por defecto de desglose
+        const defaultWorkBreakdown: {[key: string]: number} = {};
+        budgets.forEach(budget => {
+          budget.interfaces?.forEach(interfaceData => {
+            interfaceData.pcps?.forEach(pcp => {
+              interfaceData.elements?.forEach(element => {
+                const key = `${budget.budget_id}-${interfaceData.interfaceId}-${pcp.bim_pcp_id}-${element.bim_element_id}`;
+                if (interfaceData.workBreakdown && interfaceData.workBreakdown.length > 0) {
+                  defaultWorkBreakdown[key] = interfaceData.workBreakdown[0].work_breakdown_id;
+                }
+              });
+            });
+          });
+        });
+        
+        console.log('🔍 DEBUG defaultWorkBreakdown:', defaultWorkBreakdown);
+        
+        Object.keys(produccionData).forEach(key => {
+          const cantidad = produccionData[key];
+          const odt = produccionODT?.[key] || 0;
+          // Usar el valor guardado o el valor por defecto
+          const workBreakdownId = produccionDesglosa?.[key] || defaultWorkBreakdown[key];
+          
+          console.log(`🔍 Procesando key: ${key}`, {
+            cantidad,
+            odt,
+            workBreakdownId,
+            workBreakdownIdGuardado: produccionDesglosa?.[key],
+            workBreakdownIdDefault: defaultWorkBreakdown[key],
+            pasaValidacion: (cantidad > 0 || odt > 0) && workBreakdownId
+          });
+          
+          const parts = key.split('-');
+          if (parts.length === 4 && (cantidad > 0 || odt > 0) && workBreakdownId) {
+            const [budgetId, interfaceId, pcpId, elementId] = parts.map(Number);
+            
+            uploadJson.produccion_lines_ids.push({
+              budget_id: budgetId,
+              interface_id: interfaceId,
+              pcp_id: pcpId,
+              element_id: elementId,
+              odt: odt,
+              work_breakdown_id: Number(workBreakdownId),
+              cantidad: cantidad
+            });
+          }
+        });
+
+        // Agregar líneas de producción - filas extra
+        Object.keys(produccionExtraRows).forEach(tableKey => {
+          const rows = produccionExtraRows[tableKey];
+          rows.forEach(row => {
+            // El key en el UI usa row.id, no row.elementId
+            const rowKey = `${tableKey}-${row.id}`;
+            const cantidad = produccionData?.[rowKey] || 0;
+            const odt = produccionODT?.[rowKey] || 0;
+            const workBreakdownId = produccionDesglosa?.[rowKey];
+            
+            console.log(`🔍 Procesando fila extra: ${rowKey}`, {
+              cantidad,
+              odt,
+              workBreakdownId,
+              elementId: row.elementId,
+              pasaValidacion: (cantidad > 0 || odt > 0) && workBreakdownId
+            });
+            
+            if ((cantidad > 0 || odt > 0) && workBreakdownId) {
+              const [budgetId, interfaceId, pcpId] = tableKey.split('-').map(Number);
+              
+              uploadJson.produccion_lines_ids.push({
+                budget_id: budgetId,
+                interface_id: interfaceId,
+                pcp_id: pcpId,
+                element_id: row.elementId,
+                odt: odt,
+                work_breakdown_id: Number(workBreakdownId),
+                cantidad: cantidad
+              });
+            }
+          });
+        });
+
+        console.log('✅ Total líneas de producción agregadas:', uploadJson.produccion_lines_ids.length);
+        console.log('📦 produccion_lines_ids:', JSON.stringify(uploadJson.produccion_lines_ids, null, 2));
+
+        // Agregar horas perdidas de empleados
+        Object.keys(horasPerdidasEmpleadosData).forEach(key => {
+          const horasPerdidas = horasPerdidasEmpleadosData[key];
+          if (horasPerdidas > 0) {
+            const parts = key.split('-').map(Number);
+            if (parts.length === 3) {
+              const [employeeId, budgetId, pcpId] = parts;
+              uploadJson.horas_perdidas_empleados_ids.push({
+                hr_employee_id: employeeId,
+                budget_id: budgetId,
+                bim_pcp_id: pcpId,
+                hora_inicio: horasPerdidasEmpleadosHoraInicio?.[key] || 0,
+                horas_perdidas: horasPerdidas,
+                causa: horasPerdidasEmpleadosCausa?.[key] || '',
+                descripcion: horasPerdidasEmpleadosDescripcion?.[key] || ''
+              });
+            }
+          }
+        });
+
+        // Agregar horas perdidas de equipos
+        Object.keys(horasPerdidasEquiposData).forEach(key => {
+          const horasPerdidas = horasPerdidasEquiposData[key];
+          if (horasPerdidas > 0) {
+            const lastHyphenIndex = key.lastIndexOf('-');
+            const secondLastHyphenIndex = key.lastIndexOf('-', lastHyphenIndex - 1);
+            const licensePlate = key.substring(0, secondLastHyphenIndex);
+            const budgetId = parseInt(key.substring(secondLastHyphenIndex + 1, lastHyphenIndex));
+            const pcpId = parseInt(key.substring(lastHyphenIndex + 1));
+            
+            uploadJson.horas_perdidas_equipos_ids.push({
+              license_plate: licensePlate,
+              budget_id: budgetId,
+              bim_pcp_id: pcpId,
+              hora_inicio: horasPerdidasEquiposHoraInicio?.[key] || 0,
+              horas_perdidas: horasPerdidas,
+              causa: horasPerdidasEquiposCausa?.[key] || '',
+              descripcion: horasPerdidasEquiposDescripcion?.[key] || ''
+            });
+          }
+        });
+
         // Crear la entrada del historial
         const historyEntry = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -414,23 +856,39 @@ export default function Dashboard() {
           budgetsCount: budgets.length,
           totalHours,
           textData,
-          action: 'upload'
+          action: 'upload',
+          downloadJson: downloadJson,
+          uploadJson: uploadJson
         };
+
+        console.log('📝 Guardando entrada en historial:', {
+          id: historyEntry.id,
+          timestamp: historyEntry.timestamp,
+          partName: historyEntry.partName,
+          date: historyEntry.date
+        });
 
         // Obtener historial existente
         const existingHistory = localStorage.getItem('diary_parts_history');
         const history = existingHistory ? JSON.parse(existingHistory) : [];
         
+        console.log('📚 Historial antes de agregar:', history.length, 'entradas');
+        
         // Agregar nueva entrada al inicio
         history.unshift(historyEntry);
+        
+        console.log('📚 Historial después de agregar:', history.length, 'entradas');
         
         // Limitar el historial a las últimas 50 entradas
         const limitedHistory = history.slice(0, 50);
         
+        console.log('📚 Historial después de limitar:', limitedHistory.length, 'entradas');
+        
         // Guardar en localStorage
         localStorage.setItem('diary_parts_history', JSON.stringify(limitedHistory));
         
-        console.log('✅ Entrada guardada en el historial');
+        console.log('✅ Entrada guardada en el historial con JSONs completos');
+        console.log('🔍 Verificar en localStorage:', localStorage.getItem('diary_parts_history')?.substring(0, 200));
       } catch (error) {
         console.error('Error al guardar en el historial:', error);
       }
@@ -461,6 +919,19 @@ export default function Dashboard() {
       setShowParts(false);
       setPcpData({});
       setEquipmentData({});
+      setHorasPerdidasEmpleadosData({});
+      setHorasPerdidasEquiposData({});
+      setHorasPerdidasEmpleadosHoraInicio({});
+      setHorasPerdidasEquiposHoraInicio({});
+      setHorasPerdidasEmpleadosCausa({});
+      setHorasPerdidasEquiposCausa({});
+      setHorasPerdidasEmpleadosDescripcion({});
+      setHorasPerdidasEquiposDescripcion({});
+      setProduccionData({});
+      setProduccionEstatus({});
+      setProduccionODT({});
+      setProduccionDesglosa({});
+      setProduccionExtraRows({});
       setObservations('');
       setInasistencias({});
       setNoTrabajoState(false);
@@ -541,9 +1012,78 @@ export default function Dashboard() {
       console.log('PCPs:', pcps.length);
       console.log('Budgets:', budgets.length);
       console.log('PCP Data keys:', Object.keys(pcpData).length);
+      console.log('Equipment Data keys:', Object.keys(equipmentData).length);
+      console.log('Produccion Data keys:', Object.keys(produccionData).length);
+      console.log('Horas Perdidas Empleados keys:', Object.keys(horasPerdidasEmpleadosData).length);
+      console.log('Horas Perdidas Equipos keys:', Object.keys(horasPerdidasEquiposData).length);
       console.log('Observations:', observations);
       console.log('File attached:', !!fileData);
       console.log('Inasistencias:', inasistencias);
+
+      // Calcular KPIs antes de enviar
+      let manoObraRows = 0;
+      employees.forEach(employee => {
+        const isInasistente = inasistencias?.[employee.hr_employee_id] || false;
+        if (isInasistente) {
+          manoObraRows += 1; // Una fila por inasistencia
+        } else {
+          budgets.forEach(budget => {
+            pcps.forEach(pcp => {
+              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const hours = pcpData[key] || 0;
+              if (hours > 0) {
+                manoObraRows += 1;
+              }
+            });
+          });
+        }
+      });
+
+      let equiposRows = 0;
+      if (equipments && equipmentData) {
+        equipments.forEach(equipment => {
+          budgets.forEach(budget => {
+            pcps.forEach(pcp => {
+              const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const hours = equipmentData[key] || 0;
+              if (hours > 0) {
+                equiposRows += 1;
+              }
+            });
+          });
+        });
+      }
+
+      let produccionRows = 0;
+      if (produccionData) {
+        Object.keys(produccionData).forEach(key => {
+          const cantidad = produccionData[key];
+          const odt = produccionODT?.[key] || 0;
+          if (cantidad > 0 || odt > 0) {
+            produccionRows += 1;
+          }
+        });
+      }
+
+      let horasPerdidasEmpleadosRows = 0;
+      if (horasPerdidasEmpleadosData) {
+        Object.keys(horasPerdidasEmpleadosData).forEach(key => {
+          const horas = horasPerdidasEmpleadosData[key] || 0;
+          if (horas > 0) {
+            horasPerdidasEmpleadosRows += 1;
+          }
+        });
+      }
+
+      let horasPerdidasEquiposRows = 0;
+      if (horasPerdidasEquiposData) {
+        Object.keys(horasPerdidasEquiposData).forEach(key => {
+          const horas = horasPerdidasEquiposData[key] || 0;
+          if (horas > 0) {
+            horasPerdidasEquiposRows += 1;
+          }
+        });
+      }
 
       // Llamar al nuevo método de guardado
       const result = await apiService.saveDiaryPartsNew(
@@ -558,7 +1098,21 @@ export default function Dashboard() {
         observations,
         fileData,
         inasistencias,
-        noTrabajoState
+        noTrabajoState,
+        equipments,
+        equipmentData,
+        produccionData,
+        produccionODT,
+        produccionDesglosa,
+        produccionExtraRows,
+        horasPerdidasEmpleadosData,
+        horasPerdidasEmpleadosHoraInicio,
+        horasPerdidasEmpleadosCausa,
+        horasPerdidasEmpleadosDescripcion,
+        horasPerdidasEquiposData,
+        horasPerdidasEquiposHoraInicio,
+        horasPerdidasEquiposCausa,
+        horasPerdidasEquiposDescripcion
       );
       
       console.log('=== Resultado del guardado ===', result);
@@ -572,8 +1126,11 @@ export default function Dashboard() {
         throw new Error(result?.message || 'Error al guardar el parte diario');
       }
 
+      // Crear mensaje con KPIs
+      const kpiMessage = `✅ Parte subido exitosamente!\n\n📊 KPIs de subida:\n• Filas de mano de obra: ${manoObraRows}\n• Filas de equipos: ${equiposRows}\n• Filas de producción: ${produccionRows}\n• Filas de horas perdidas (empleados): ${horasPerdidasEmpleadosRows}\n• Filas de horas perdidas (equipos): ${horasPerdidasEquiposRows}\n• Observaciones: ${observations ? 'Sí' : 'No'}\n• Archivo adjunto: ${fileData ? 'Sí' : 'No'}`;
+
       console.log('✅ Guardado exitoso!');
-      setSaveSuccess('Partes diarios guardados exitosamente');
+      setSaveSuccess(kpiMessage);
       
       // Guardar en el historial antes de limpiar
       saveToHistory();
@@ -597,15 +1154,22 @@ export default function Dashboard() {
       setShowParts(false);
       setPcpData({});
       setEquipmentData({});
+      setHorasPerdidasEmpleadosData({});
+      setHorasPerdidasEquiposData({});
+      setHorasPerdidasEmpleadosHoraInicio({});
+      setHorasPerdidasEquiposHoraInicio({});
+      setHorasPerdidasEmpleadosCausa({});
+      setHorasPerdidasEquiposCausa({});
+      setHorasPerdidasEmpleadosDescripcion({});
+      setHorasPerdidasEquiposDescripcion({});
       setObservations('');
       setInasistencias({});
       setNoTrabajoState(false);
       setAttachments(null);
       clearLocalStorage();
       
-      setTimeout(() => {
-        setSaveSuccess(null);
-      }, 5000);
+      // No limpiar el mensaje de éxito automáticamente
+      // Se limpiará solo cuando se suba un nuevo parte
     } catch (error) {
       console.error('=== ERROR al guardar parte ===', error);
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido al guardar';
@@ -629,9 +1193,18 @@ export default function Dashboard() {
     window.location.href = '/';
   };
 
-  const togglePcpVisibility = (budgetId: number, pcpId: number, tableType: 'manoObra' | 'equipos' = 'manoObra') => {
+  const togglePcpVisibility = (budgetId: number, pcpId: number, tableType: 'manoObra' | 'equipos' | 'horasPerdidasEmpleados' | 'horasPerdidasEquipos' = 'manoObra') => {
     const key = `${budgetId}-${pcpId}`;
-    const setterFn = tableType === 'manoObra' ? setHiddenPcpsManoObra : setHiddenPcpsEquipos;
+    let setterFn;
+    if (tableType === 'manoObra') {
+      setterFn = setHiddenPcpsManoObra;
+    } else if (tableType === 'equipos') {
+      setterFn = setHiddenPcpsEquipos;
+    } else if (tableType === 'horasPerdidasEmpleados') {
+      setterFn = setHiddenPcpsHorasPerdidasEmpleados;
+    } else {
+      setterFn = setHiddenPcpsHorasPerdidasEquipos;
+    }
     setterFn(prev => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
@@ -643,19 +1216,65 @@ export default function Dashboard() {
     });
   };
 
-  const showAllPcps = (tableType: 'manoObra' | 'equipos' = 'manoObra') => {
+  const showAllPcps = (tableType: 'manoObra' | 'equipos' | 'horasPerdidasEmpleados' | 'horasPerdidasEquipos' = 'manoObra') => {
     if (tableType === 'manoObra') {
       setHiddenPcpsManoObra(new Set());
-    } else {
+    } else if (tableType === 'equipos') {
       setHiddenPcpsEquipos(new Set());
+    } else if (tableType === 'horasPerdidasEmpleados') {
+      setHiddenPcpsHorasPerdidasEmpleados(new Set());
+    } else {
+      setHiddenPcpsHorasPerdidasEquipos(new Set());
     }
     setShowHiddenColumnsMenu(false);
   };
 
+  // Funciones para verificar si las pestañas tienen datos
+  const hasManoObraData = () => {
+    // Verificar si hay horas en pcpData o si hay inasistencias marcadas
+    return Object.keys(pcpData).length > 0 || Object.values(inasistencias).some(val => val);
+  };
+
+  const hasEquiposData = () => {
+    // Verificar si hay horas de equipos en equipmentData
+    return Object.keys(equipmentData).length > 0;
+  };
+
+  const hasProduccionData = () => {
+    // Verificar si hay datos de producción (ODT, cantidad, o filas extra)
+    return Object.keys(produccionODT).length > 0 || 
+           Object.keys(produccionData).length > 0 || 
+           Object.keys(produccionExtraRows).some(key => produccionExtraRows[key].length > 0);
+  };
+
+  const hasHorasPerdidasData = () => {
+    // Verificar si hay horas perdidas de empleados o equipos
+    return Object.keys(horasPerdidasEmpleadosData).length > 0 || 
+           Object.keys(horasPerdidasEquiposData).length > 0;
+  };
+
+  // Función para verificar si un PCP tiene horas en mano de obra en cualquier presupuesto
+  const pcpHasHorasInManoObra = (budgetId: number, pcpId: number): boolean => {
+    // Verificar si hay alguna entrada en pcpData para este PCP en CUALQUIER presupuesto
+    const hasHoras = Object.keys(pcpData).some(key => {
+      const [empId, budId, pcpIdStr] = key.split('-');
+      return parseInt(pcpIdStr) === pcpId && pcpData[key] > 0;
+    });
+    return hasHoras;
+  };
+
+  const togglePartInfoCollapse = () => {
+    const newState = !isPartInfoCollapsed;
+    setIsPartInfoCollapsed(newState);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('part_info_collapsed', String(newState));
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100'}`}>
+        <div className={`animate-spin rounded-full h-12 w-12 border-b-2 ${isDarkMode ? 'border-blue-400' : 'border-blue-600'}`}></div>
       </div>
     );
   }
@@ -665,20 +1284,20 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className={`min-h-screen p-4 transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100'}`}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+        <div className={`rounded-2xl shadow-xl p-6 mb-6 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              <h1 className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                 Parte Offline: {connection.employeeName || connection.username}
               </h1>
-              <p className="text-gray-600">
+              <p className={isDarkMode ? 'text-gray-300' : 'text-gray-600'}>
                 Conectado a: <span className="font-medium">{connection.url}</span>
               </p>
               {diaryPartDate && (
-                <p className="text-sm text-blue-600 font-semibold mt-1">
+                <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
                   Fecha: {new Date(diaryPartDate).toLocaleDateString('es-ES', {
                     weekday: 'long',
                     year: 'numeric',
@@ -692,42 +1311,43 @@ export default function Dashboard() {
               <button
                 onClick={handleSaveParts}
                 disabled={savingParts || !hasLocalData()}
-                className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
                 title="Subir parte al servidor"
               >
-                <Upload className="h-6 w-6" />
+                <Upload className="h-5 w-5" />
+                <span>SUBIR</span>
               </button>
               <button
                 onClick={() => window.location.href = '/help'}
-                className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-orange-400 hover:bg-gray-700' : 'text-gray-600 hover:text-orange-600 hover:bg-orange-50'}`}
                 title="Ayuda y tutoriales"
               >
                 <HelpCircle className="h-6 w-6" />
               </button>
               <button
                 onClick={handleHistory}
-                className="relative p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                className={`relative p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-purple-400 hover:bg-gray-700' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'}`}
                 title="Ver historial"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {historyCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className={`absolute -top-1 -right-1 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center ${isDarkMode ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700'}`}>
                     {historyCount > 99 ? '99+' : historyCount}
                   </span>
                 )}
               </button>
               <button
                 onClick={handleManageConnection}
-                className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-blue-400 hover:bg-gray-700' : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'}`}
                 title="Gestionar conexión"
               >
                 <Settings className="h-6 w-6" />
               </button>
               <button
                 onClick={handleLogout}
-                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-red-400 hover:bg-gray-700' : 'text-gray-600 hover:text-red-600 hover:bg-red-50'}`}
                 title="Cerrar sesión"
               >
                 <LogOut className="h-6 w-6" />
@@ -738,13 +1358,31 @@ export default function Dashboard() {
 
         {/* Información del parte - Contenedor separado */}
         {showParts && employees.length > 0 && pcps.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 mt-3">
-            <div className="space-y-3">
+          <div className={`rounded-2xl shadow-xl p-6 mt-3 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Información del Parte</h2>
+              <button
+                onClick={togglePartInfoCollapse}
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-blue-400 hover:bg-gray-700' : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'}`}
+                title={isPartInfoCollapsed ? 'Expandir' : 'Minimizar'}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`h-5 w-5 transition-transform duration-300 ${isPartInfoCollapsed ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            <div className={`space-y-3 transition-all duration-300 overflow-hidden ${isPartInfoCollapsed ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
               {/* Framework Contract, Responsable, Parte y Turno */}
               {diaryPartFramework && (
-                <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
                   <div className="flex items-center space-x-4">
-                    <p className="text-sm font-bold text-gray-900">
+                    <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                       [{diaryPartFramework}]{diaryPartResponsable && `, RESPONSABLE: ${diaryPartResponsable}`}
                     </p>
                   </div>
@@ -752,21 +1390,21 @@ export default function Dashboard() {
               )}
               
               {/* Código del Parte y Turno */}
-              <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
+              <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
                 <div className="flex items-center space-x-4">
-                  <h3 className="text-lg font-bold text-gray-900">
+                  <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                     {diaryPartName || 'Parte Diario'}
                   </h3>
                   {diaryPartTurno && (
-                    <div className="px-3 py-1 bg-blue-50 border border-blue-300 rounded">
-                      <p className="text-sm font-semibold text-gray-900">
+                    <div className={`px-3 py-1 border rounded ${isDarkMode ? 'bg-blue-900 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-gray-900'}`}>
+                      <p className="text-sm font-semibold">
                         {diaryPartTurno}
                       </p>
                     </div>
                   )}
                   {cantPartesAbiertos > 0 && (
-                    <div className="px-3 py-1 bg-orange-50 border border-orange-300 rounded">
-                      <p className="text-sm font-semibold text-gray-900">
+                    <div className={`px-3 py-1 border rounded ${isDarkMode ? 'bg-orange-900 border-orange-700 text-orange-100' : 'bg-orange-50 border-orange-300 text-gray-900'}`}>
+                      <p className="text-sm font-semibold">
                         Cant Partes: {cantPartesAbiertos}
                       </p>
                     </div>
@@ -776,8 +1414,8 @@ export default function Dashboard() {
               
               {/* Disciplina, Área y Ubicación */}
               {(diaryPartDisciplina || diaryPartArea || diaryPartUbicacion) && (
-                <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
-                  <p className="text-sm font-bold text-gray-900">
+                <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                  <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                     {diaryPartDisciplina && `DISCP: ${diaryPartDisciplina}`}
                     {diaryPartArea && `, AREA: ${diaryPartArea}`}
                     {diaryPartUbicacion && `, UBIC: ${diaryPartUbicacion}`}
@@ -790,9 +1428,9 @@ export default function Dashboard() {
 
         {/* Diary Parts List - Editable Table */}
         {showParts && employees.length > 0 && pcps.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 mt-3">
+          <div className={`rounded-2xl shadow-xl p-6 mt-3 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
             {/* Tabs */}
-            <div className="flex space-x-2 mb-4 border-b border-gray-200">
+            <div className={`flex space-x-2 mb-4 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
               <button
                 onClick={() => setActiveTab('manoObra')}
                 className={`px-6 py-3 font-semibold text-sm transition-colors relative ${
@@ -801,7 +1439,12 @@ export default function Dashboard() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                👷 Mano de Obra
+                <span className="flex items-center space-x-2">
+                  <span>👷 Mano de Obra</span>
+                  {hasManoObraData() && (
+                    <span className="text-green-600">✓</span>
+                  )}
+                </span>
               </button>
               <button
                 onClick={() => setActiveTab('equipos')}
@@ -811,7 +1454,42 @@ export default function Dashboard() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                🚜 Equipos
+                <span className="flex items-center space-x-2">
+                  <span>🚜 Equipos</span>
+                  {hasEquiposData() && (
+                    <span className="text-green-600">✓</span>
+                  )}
+                </span>
+              </button>
+              <button
+                onClick={() => setActiveTab('produccion')}
+                className={`px-6 py-3 font-semibold text-sm transition-colors relative ${
+                  activeTab === 'produccion'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span className="flex items-center space-x-2">
+                  <span>📊 Producción</span>
+                  {hasProduccionData() && (
+                    <span className="text-green-600">✓</span>
+                  )}
+                </span>
+              </button>
+              <button
+                onClick={() => setActiveTab('horasPerdidas')}
+                className={`px-6 py-3 font-semibold text-sm transition-colors relative ${
+                  activeTab === 'horasPerdidas'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span className="flex items-center space-x-2">
+                  <span>⏱️ Horas Perdidas</span>
+                  {hasHorasPerdidasData() && (
+                    <span className="text-green-600">✓</span>
+                  )}
+                </span>
               </button>
             </div>
 
@@ -839,9 +1517,6 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="flex items-center space-x-3">
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                  💾 Guardado automático local
-                </span>
                 <button
                   onClick={handleClearLocalData}
                   className="flex items-center space-x-1 text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-full transition-colors"
@@ -871,11 +1546,11 @@ export default function Dashboard() {
             
             {saveSuccess && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-start">
+                  <svg className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-green-700 text-sm">{saveSuccess}</span>
+                  <span className="text-green-700 text-sm whitespace-pre-line">{saveSuccess}</span>
                 </div>
               </div>
             )}
@@ -887,7 +1562,7 @@ export default function Dashboard() {
                 <div className="mb-3 flex items-center justify-end">
                   <button
                     onClick={() => showAllPcps('manoObra')}
-                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center space-x-1"
+                    className={`text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center space-x-1 ${isDarkMode ? 'bg-blue-900 text-blue-200 hover:bg-blue-800' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
                   >
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -897,18 +1572,27 @@ export default function Dashboard() {
                   </button>
                 </div>
               )}
-              <table className="w-full border-collapse border border-gray-300">
+              <table className={`w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
                 <thead>
                   {/* Primera fila de cabecera: Presupuestos */}
-                  <tr className="bg-blue-50">
-                    <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
+                  <tr className={isDarkMode ? 'bg-blue-900' : 'bg-blue-50'}>
+                    <th className={`border px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`} rowSpan={2}>
                       ID
                     </th>
-                    <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
+                    <th className={`border px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`} rowSpan={2}>
                       Empleado
                     </th>
-                    <th className="border border-gray-300 px-4 py-3 text-center text-sm font-medium text-gray-700" title="Inasistencia" rowSpan={2}>
-                      I
+                    <th className={`border px-4 py-3 text-center text-sm font-medium cursor-pointer ${isDarkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`} title="Click para marcar/desmarcar todas las inasistencias" rowSpan={2} onClick={handleToggleAllInasistencias}>
+                      <div className="flex items-center justify-center space-x-1">
+                        <input
+                          type="checkbox"
+                          checked={allInasistenciasChecked}
+                          onChange={handleToggleAllInasistencias}
+                          className={`w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span>I</span>
+                      </div>
                     </th>
                     {budgets.map((budget) => {
                       // Contar cuántos PCPs visibles tiene este budget
@@ -920,7 +1604,7 @@ export default function Dashboard() {
                       return (
                         <th 
                           key={budget.budget_id} 
-                          className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
+                          className={`border px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'border-gray-600 text-gray-200 bg-blue-800' : 'border-gray-300 text-gray-700 bg-blue-100'}`} 
                           colSpan={visiblePcpsCount}
                         >
                           {budget.budget_name}
@@ -929,7 +1613,7 @@ export default function Dashboard() {
                     })}
                   </tr>
                   {/* Segunda fila de cabecera: PCPs (repetidos por cada presupuesto) */}
-                  <tr className="bg-gray-50">
+                  <tr className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}>
                     {budgets.map((budget) => (
                       pcps.map((pcp) => {
                         const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
@@ -940,7 +1624,7 @@ export default function Dashboard() {
                         return (
                           <th 
                             key={key}
-                            className="border border-gray-300 px-2 py-8 text-center text-xs font-medium text-gray-700 relative group"
+                            className={`border px-2 py-8 text-center text-xs font-medium relative group ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`}
                           >
                             <div className="transform -rotate-90 whitespace-nowrap absolute inset-0 flex items-center justify-center pointer-events-none">
                               {pcp.bim_pcp_name}
@@ -950,10 +1634,10 @@ export default function Dashboard() {
                                 e.stopPropagation();
                                 togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id, 'manoObra');
                               }}
-                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5 pointer-events-auto"
+                              className={`absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 pointer-events-auto ${isDarkMode ? 'hover:bg-gray-600 text-gray-300' : 'hover:bg-gray-300 text-gray-600'}`}
                               title="Clic para ocultar esta columna"
                             >
-                              <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                               </svg>
                             </button>
@@ -983,21 +1667,21 @@ export default function Dashboard() {
                     return (
                       <tr 
                         key={employee.hr_employee_id} 
-                        className={`hover:bg-gray-50 ${hasValidationError ? 'bg-red-50 border-l-4 border-l-red-500' : ''}`}
+                        className={`${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} ${hasValidationError ? (isDarkMode ? 'bg-red-900 border-l-4 border-l-red-500' : 'bg-red-50 border-l-4 border-l-red-500') : ''}`}
                         title={hasValidationError ? 'Error: Debe tener al menos una hora asignada o marcar como inasistencia' : ''}
                       >
-                        <td className="border border-gray-300 px-4 py-3 text-sm text-gray-700 font-mono">
+                        <td className={`border px-4 py-3 text-sm font-mono ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'}`}>
                           {employee.hr_employee_id}
                         </td>
-                        <td className="border border-gray-300 px-4 py-3 text-sm text-gray-900">
+                        <td className={`border px-4 py-3 text-sm ${isDarkMode ? 'border-gray-600 text-gray-100' : 'border-gray-300 text-gray-900'}`}>
                           {employee.hr_employee_name}
                         </td>
-                        <td className="border border-gray-300 px-4 py-3 text-center">
+                        <td className={`border px-4 py-3 text-center ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
                           <input
                             type="checkbox"
                             checked={inasistencias[employee.hr_employee_id] || false}
                             onChange={(e) => handleInasistenciaChange(employee.hr_employee_id, e.target.checked)}
-                            className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 focus:ring-2"
+                            className={`w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 focus:ring-2 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
                           />
                         </td>
                         {/* Generar celdas para cada combinación de Presupuesto x PCP */}
@@ -1011,17 +1695,17 @@ export default function Dashboard() {
                             const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                             
                             return (
-                              <td key={key} className="border border-gray-300 px-2 py-3 text-center w-16">
+                              <td key={key} className={`border px-2 py-3 text-center w-16 ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
                                 <input
                                   type="number"
                                   step="0.5"
                                   min="0"
                                   value={pcpData[key] || ''}
                                   onChange={(e) => handlePcpChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                  className={`w-12 px-1 py-1 border border-gray-300 rounded text-sm text-center text-gray-900 focus:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none ${
+                                  className={`w-12 px-1 py-1 border rounded text-sm text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none ${
                                     (pcpData[key] || 0) > 0 
-                                      ? 'bg-yellow-100' 
-                                      : 'bg-white'
+                                      ? (isDarkMode ? 'bg-yellow-900 border-yellow-700 text-yellow-100' : 'bg-yellow-100 border-gray-300 text-gray-900')
+                                      : (isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900')
                                   }`}
                                   placeholder="0"
                                 />
@@ -1034,8 +1718,8 @@ export default function Dashboard() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-100 font-medium">
-                    <td className="border border-gray-300 px-4 py-3 text-sm text-gray-700" colSpan={3}>
+                  <tr className={`font-medium ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <td className={`border px-4 py-3 text-sm ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`} colSpan={3}>
                       <strong>Subtotal</strong>
                     </td>
                     {/* Calcular subtotales para cada combinación de Presupuesto x PCP */}
@@ -1145,11 +1829,6 @@ export default function Dashboard() {
               <div className="flex items-center space-x-4">
                 <span className="text-sm font-semibold text-gray-700">🚜 Equipos</span>
               </div>
-              <div className="flex items-center space-x-3">
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                  💾 Guardado automático local
-                </span>
-              </div>
             </div>
 
             {saveError && (
@@ -1163,11 +1842,11 @@ export default function Dashboard() {
             
             {saveSuccess && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-start">
+                  <svg className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-green-700 text-sm">{saveSuccess}</span>
+                  <span className="text-green-700 text-sm whitespace-pre-line">{saveSuccess}</span>
                 </div>
               </div>
             )}
@@ -1211,6 +1890,9 @@ export default function Dashboard() {
                         </th>
                       );
                     })}
+                    <th className="border border-gray-300 px-4 py-3 text-center text-sm font-medium text-gray-700" rowSpan={2}>
+                      HI
+                    </th>
                   </tr>
                   <tr className="bg-gray-50">
                     {budgets.map((budget) => (
@@ -1281,13 +1963,20 @@ export default function Dashboard() {
                                   step="0.5"
                                   value={equipmentData[key] || ''}
                                   onChange={(e) => handleEquipmentChange(equipment.license_plate, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                  className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  className={`w-full px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                    (equipmentData[key] || 0) > 0 
+                                      ? 'bg-yellow-100' 
+                                      : 'bg-white'
+                                  }`}
                                   placeholder=""
                                 />
                               </td>
                             );
                           })
                         ))}
+                        <td className="border border-gray-300 px-4 py-2 text-center text-sm font-bold text-gray-900">
+                          {(8 - totalHours).toFixed(1)}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1319,10 +2008,684 @@ export default function Dashboard() {
                         );
                       })
                     ))}
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      <span className="text-xs font-bold text-gray-700">
+                        -
+                      </span>
+                    </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+
+            {/* Info de presupuestos disponibles */}
+            {budgets.length > 0 && (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">Presupuestos Disponibles:</h4>
+                <div className="flex flex-wrap gap-2">
+                  {budgets.map((budget) => (
+                    <span key={budget.budget_id} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {budget.budget_name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+              </>
+            )}
+
+            {/* Contenido de Producción */}
+            {activeTab === 'produccion' && (
+              <div className="space-y-4">
+                {budgets.map(budget => 
+                  pcps.map(pcp => {
+                    const tableKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                    const isCollapsed = collapsedProduccionTables.has(tableKey);
+                    
+                    // Obtener las interfaces BIM para este presupuesto
+                    const bimInterfaces = budget.arr_bim_interface || [];
+                    
+                    // Recopilar datos relevantes: buscar interfaces que tengan PCPs coincidentes y sus elementos
+                    const relevantData: {
+                      interfaceName: string;
+                      interfaceId: number;
+                      elements: BimElement[];
+                      workBreakdown: WorkBreakdown[];
+                      workPackageName: string;
+                    }[] = [];
+                    
+                    bimInterfaces.forEach(bimInterface => {
+                      const interfacePcps = bimInterface.pcps || [];
+                      
+                      // Buscar si hay un PCP que coincida
+                      let hasPcp = false;
+                      let elementsData: BimElement[] = [];
+                      let workBreakdownData: WorkBreakdown[] = [];
+                      let workPackageNameData = '';
+                      
+                      interfacePcps.forEach(item => {
+                        // Si el item tiene bim_pcp_id y coincide con el PCP actual
+                        if (item.bim_pcp_id === pcp.bim_pcp_id) {
+                          hasPcp = true;
+                          workBreakdownData = item.work_breakdown || [];
+                        }
+                        
+                        // Si el item tiene elements (es el objeto de work_package)
+                        if (item.elements && item.elements.length > 0) {
+                          elementsData = item.elements;
+                          workPackageNameData = item.work_package_name || '';
+                        }
+                      });
+                      
+                      // Si encontramos el PCP y hay elementos, agregar a relevantData
+                      if (hasPcp && elementsData.length > 0) {
+                        relevantData.push({
+                          interfaceName: bimInterface.bim_interface_name || '',
+                          interfaceId: bimInterface.bim_interface_id,
+                          elements: elementsData,
+                          workBreakdown: workBreakdownData,
+                          workPackageName: workPackageNameData
+                        });
+                      }
+                    });
+                    
+                    // Si no hay datos relevantes para este PCP, no mostrar la tabla
+                    if (relevantData.length === 0) return null;
+                    
+                    // Verificar si el PCP tiene horas en mano de obra
+                    const hasHorasEnManoObra = pcpHasHorasInManoObra(budget.budget_id, pcp.bim_pcp_id);
+                    
+                    // Obtener el nombre del paquete de trabajo (es el mismo para toda la tabla)
+                    const workPackageName = relevantData[0]?.workPackageName || '';
+                    
+                    return (
+                      <div key={tableKey} className="bg-white rounded-lg border border-gray-300 shadow-sm">
+                        {/* Header de la tabla con botón de colapso */}
+                        <button
+                          onClick={() => toggleProduccionTable(budget.budget_id, pcp.bim_pcp_id)}
+                          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-lg">
+                              {isCollapsed ? '▶' : '▼'}
+                            </span>
+                            <h3 className="text-sm font-bold text-gray-900">
+                              Presupuesto {budget.budget_name} + PCP [{pcp.bim_pcp_name}] - Paquete: {workPackageName}
+                            </h3>
+                            {!hasHorasEnManoObra && (
+                              <span className="text-xs text-red-600 font-medium bg-red-50 px-2 py-1 rounded">
+                                ⚠️ Sin horas en mano de obra
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                        
+                        {/* Contenido de la tabla (colapsable) */}
+                        {!isCollapsed && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                              <thead>
+                                <tr>
+                                  <th className="border border-gray-300 p-2 bg-gray-100 text-xs font-semibold text-gray-700 text-left">
+                                    Elemento
+                                  </th>
+                                  <th className="border border-gray-300 p-2 bg-gray-100 text-xs font-semibold text-gray-700 text-left">
+                                    ODT
+                                  </th>
+                                  <th className="border border-gray-300 p-2 bg-gray-100 text-xs font-semibold text-gray-700 text-left">
+                                    Desgloce
+                                  </th>
+                                  <th className="border border-gray-300 p-2 bg-gray-100 text-xs font-semibold text-gray-700 text-left">
+                                    Estatus
+                                  </th>
+                                  <th className="border border-gray-300 p-2 bg-gray-100 text-xs font-semibold text-gray-700 text-left">
+                                    Cantidad
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {relevantData.map((data, dataIdx) => {
+                                  return data.elements.map((element, elementIdx) => {
+                                    const key = `${budget.budget_id}-${data.interfaceId}-${pcp.bim_pcp_id}-${element.bim_element_id}`;
+                                    const cantidadValue = produccionData[key] || '';
+                                    const odtValue = produccionODT[key] || '';
+                                    const desglosaValue = produccionDesglosa[key] || (data.workBreakdown.length > 0 ? data.workBreakdown[0].work_breakdown_id : '');
+                                    
+                                    // Mapear execution_status a etiquetas en español
+                                    const estatusLabels: { [key: string]: string } = {
+                                      'not': 'Sin Ejecutar',
+                                      'not_r': 'Retrasado',
+                                      'execute': 'Ejecutandose',
+                                      'executed': 'Completado',
+                                    };
+                                    const estatusValue = estatusLabels[element.execution_status || ''] || element.execution_status || '-';
+                                    
+                                    return (
+                                      <tr key={`${data.interfaceId}-${element.bim_element_id}`} className="hover:bg-gray-50">
+                                        {/* Columna Elemento */}
+                                        <td className="border border-gray-300 p-2 text-xs text-gray-700">
+                                          {element.bim_element_name}
+                                        </td>
+                                        
+                                        {/* Columna ODT */}
+                                        <td className="border border-gray-300 p-1">
+                                          <input
+                                            type="number"
+                                            value={odtValue}
+                                            onChange={(e) => handleProduccionODTChange(
+                                              budget.budget_id,
+                                              data.interfaceId,
+                                              pcp.bim_pcp_id,
+                                              element.bim_element_id,
+                                              e.target.value
+                                            )}
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            disabled={!hasHorasEnManoObra}
+                                            className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${odtValue ? 'bg-yellow-50' : ''} ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                          />
+                                        </td>
+                                        
+                                        {/* Columna Desgloce */}
+                                        <td className="border border-gray-300 p-1">
+                                          <select
+                                            value={desglosaValue}
+                                            onChange={(e) => handleProduccionDesglosaChange(
+                                              budget.budget_id,
+                                              data.interfaceId,
+                                              pcp.bim_pcp_id,
+                                              element.bim_element_id,
+                                              e.target.value
+                                            )}
+                                            disabled={!hasHorasEnManoObra}
+                                            className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                          >
+                                            {data.workBreakdown.map((wb) => (
+                                              <option key={wb.work_breakdown_id} value={wb.work_breakdown_id}>
+                                                {wb.work_breakdown_name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </td>
+                                        
+                                        {/* Columna Estatus */}
+                                        <td className="border border-gray-300 p-2 text-xs text-gray-700">
+                                          <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                            element.execution_status === 'executed' ? 'bg-green-100 text-green-800' :
+                                            element.execution_status === 'execute' ? 'bg-blue-100 text-blue-800' :
+                                            element.execution_status === 'not_r' ? 'bg-red-100 text-red-800' :
+                                            'bg-gray-100 text-gray-800'
+                                          }`}>
+                                            {estatusValue}
+                                          </span>
+                                        </td>
+                                        
+                                        {/* Columna Cantidad */}
+                                        <td className="border border-gray-300 p-1">
+                                          <input
+                                            type="number"
+                                            value={cantidadValue}
+                                            onChange={(e) => handleProduccionChange(
+                                              budget.budget_id,
+                                              data.interfaceId,
+                                              pcp.bim_pcp_id,
+                                              element.bim_element_id,
+                                              e.target.value
+                                            )}
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            disabled={!hasHorasEnManoObra}
+                                            className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${cantidadValue ? 'bg-yellow-50' : ''} ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                          />
+                                        </td>
+                                      </tr>
+                                    );
+                                  });
+                                })}
+                                {/* Filas adicionales */}
+                                {(produccionExtraRows[tableKey] || []).map((extraRow, idx) => {
+                                  const element = relevantData.flatMap(d => d.elements).find(e => e.bim_element_id === extraRow.elementId);
+                                  if (!element) return null;
+                                  
+                                  const interfaceData = relevantData.find(d => d.elements.some(e => e.bim_element_id === extraRow.elementId));
+                                  if (!interfaceData) return null;
+                                  
+                                  const key = `${budget.budget_id}-${interfaceData.interfaceId}-${pcp.bim_pcp_id}-${extraRow.id}`;
+                                  const cantidadValue = produccionData[key] || '';
+                                  const odtValue = produccionODT[key] || '';
+                                  const desglosaValue = produccionDesglosa[key] || (interfaceData.workBreakdown.length > 0 ? interfaceData.workBreakdown[0].work_breakdown_id : '');
+                                  
+                                  // Mapear execution_status a etiquetas en español
+                                  const estatusLabels: { [key: string]: string } = {
+                                    'not': 'Sin Ejecutar',
+                                    'not_r': 'Retrasado',
+                                    'execute': 'Ejecutandose',
+                                    'executed': 'Completado',
+                                  };
+                                  const estatusValue = estatusLabels[element.execution_status || ''] || element.execution_status || '-';
+                                  
+                                  return (
+                                    <tr key={extraRow.id} className="hover:bg-gray-50 bg-blue-50">
+                                      {/* Columna Elemento con selector */}
+                                      <td className="border border-gray-300 p-1">
+                                        <div className="flex items-center space-x-1">
+                                          <select
+                                            value={extraRow.elementId}
+                                            onChange={(e) => {
+                                              const newElementId = parseInt(e.target.value);
+                                              setProduccionExtraRows(prev => ({
+                                                ...prev,
+                                                [tableKey]: prev[tableKey].map(row => 
+                                                  row.id === extraRow.id ? { ...row, elementId: newElementId } : row
+                                                )
+                                              }));
+                                            }}
+                                            disabled={!hasHorasEnManoObra}
+                                            className={`flex-1 px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                          >
+                                            {relevantData.flatMap(d => d.elements).map(el => (
+                                              <option key={el.bim_element_id} value={el.bim_element_id}>
+                                                {el.bim_element_name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <button
+                                            onClick={() => {
+                                              setProduccionExtraRows(prev => ({
+                                                ...prev,
+                                                [tableKey]: prev[tableKey].filter(row => row.id !== extraRow.id)
+                                              }));
+                                              // Limpiar datos de esta fila
+                                              setProduccionData(prev => {
+                                                const newData = {...prev};
+                                                delete newData[key];
+                                                return newData;
+                                              });
+                                              setProduccionEstatus(prev => {
+                                                const newData = {...prev};
+                                                delete newData[key];
+                                                return newData;
+                                              });
+                                              setProduccionODT(prev => {
+                                                const newData = {...prev};
+                                                delete newData[key];
+                                                return newData;
+                                              });
+                                              setProduccionDesglosa(prev => {
+                                                const newData = {...prev};
+                                                delete newData[key];
+                                                return newData;
+                                              });
+                                            }}
+                                            className="p-1 text-red-600 hover:bg-red-100 rounded"
+                                            title="Eliminar fila"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </td>
+                                      
+                                      {/* Columna ODT */}
+                                      <td className="border border-gray-300 p-1">
+                                        <input
+                                          type="number"
+                                          value={odtValue}
+                                          onChange={(e) => handleProduccionODTChange(
+                                            budget.budget_id,
+                                            interfaceData.interfaceId,
+                                            pcp.bim_pcp_id,
+                                            extraRow.id,
+                                            e.target.value
+                                          )}
+                                          step="0.01"
+                                          placeholder="0.00"
+                                          disabled={!hasHorasEnManoObra}
+                                          className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${odtValue ? 'bg-yellow-50' : ''} ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        />
+                                      </td>
+                                      
+                                      {/* Columna Desgloce */}
+                                      <td className="border border-gray-300 p-1">
+                                        <select
+                                          value={desglosaValue}
+                                          onChange={(e) => handleProduccionDesglosaChange(
+                                            budget.budget_id,
+                                            interfaceData.interfaceId,
+                                            pcp.bim_pcp_id,
+                                            extraRow.id,
+                                            e.target.value
+                                          )}
+                                          disabled={!hasHorasEnManoObra}
+                                          className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        >
+                                          {interfaceData.workBreakdown.map((wb) => (
+                                            <option key={wb.work_breakdown_id} value={wb.work_breakdown_id}>
+                                              {wb.work_breakdown_name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </td>
+                                      
+                                      {/* Columna Estatus */}
+                                      <td className="border border-gray-300 p-2 text-xs text-gray-700">
+                                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                          element.execution_status === 'executed' ? 'bg-green-100 text-green-800' :
+                                          element.execution_status === 'execute' ? 'bg-blue-100 text-blue-800' :
+                                          element.execution_status === 'not_r' ? 'bg-red-100 text-red-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {estatusValue}
+                                        </span>
+                                      </td>
+                                      
+                                      {/* Columna Cantidad */}
+                                      <td className="border border-gray-300 p-1">
+                                        <input
+                                          type="number"
+                                          value={cantidadValue}
+                                          onChange={(e) => handleProduccionChange(
+                                            budget.budget_id,
+                                            interfaceData.interfaceId,
+                                            pcp.bim_pcp_id,
+                                            extraRow.id,
+                                            e.target.value
+                                          )}
+                                          step="0.01"
+                                          placeholder="0.00"
+                                          disabled={!hasHorasEnManoObra}
+                                          className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${cantidadValue ? 'bg-yellow-50' : ''} ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        />
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            {/* Botón para agregar fila */}
+                            <div className="p-2 border-t border-gray-300 bg-gray-50">
+                              <button
+                                onClick={() => {
+                                  const firstElement = relevantData[0]?.elements[0];
+                                  if (firstElement) {
+                                    const newRowId = `extra-${Date.now()}-${Math.random()}`;
+                                    setProduccionExtraRows(prev => ({
+                                      ...prev,
+                                      [tableKey]: [
+                                        ...(prev[tableKey] || []),
+                                        { id: newRowId, elementId: firstElement.bim_element_id }
+                                      ]
+                                    }));
+                                  }
+                                }}
+                                disabled={!hasHorasEnManoObra}
+                                className={`flex items-center space-x-1 px-3 py-1 text-xs font-medium rounded transition-colors ${
+                                  hasHorasEnManoObra 
+                                    ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-100 cursor-pointer' 
+                                    : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                }`}
+                                title={!hasHorasEnManoObra ? 'Debe asignar horas en Mano de Obra primero' : ''}
+                              >
+                                <span className="text-lg">+</span>
+                                <span>Agregar Fila</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Contenido de Horas Perdidas */}
+            {activeTab === 'horasPerdidas' && (
+              <>
+
+            {saveError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <AlertCircle className="h-4 w-4 text-red-500 mr-2" />
+                  <span className="text-red-700 text-sm">{saveError}</span>
+                </div>
+              </div>
+            )}
+            
+            {saveSuccess && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-start">
+                  <svg className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-green-700 text-sm whitespace-pre-line">{saveSuccess}</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Tabla de Horas Perdidas - Empleados */}
+            <div className="overflow-x-auto mb-6">
+              <div className="mb-3 flex items-center justify-end">
+                {hiddenPcpsHorasPerdidasEmpleados.size > 0 && (
+                  <button
+                    onClick={() => showAllPcps('horasPerdidasEmpleados')}
+                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center space-x-1"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span>Mostrar {hiddenPcpsHorasPerdidasEmpleados.size} columna{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''} oculta{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''}</span>
+                  </button>
+                )}
+              </div>
+                <table className="w-full border-collapse border border-gray-300">
+                  <thead>
+                    <tr className="bg-blue-50">
+                      <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
+                        Nombre
+                      </th>
+                      {budgets.map((budget) => {
+                        const visiblePcpsCount = pcps.filter(pcp => !hiddenPcpsHorasPerdidasEmpleados.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)).length;
+                        if (visiblePcpsCount === 0) return null;
+                        
+                        return (
+                          <th 
+                            key={budget.budget_id} 
+                            className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 bg-blue-100" 
+                            colSpan={visiblePcpsCount * 4}
+                          >
+                            {budget.budget_name}
+                          </th>
+                        );
+                      })}
+                      <th className="border border-gray-300 px-4 py-3 text-center text-sm font-medium text-gray-700" rowSpan={2}>
+                        Total
+                      </th>
+                    </tr>
+                    <tr className="bg-gray-50">
+                      {budgets.map((budget) => (
+                        pcps.map((pcp) => {
+                          const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                          const isHidden = hiddenPcpsHorasPerdidasEmpleados.has(key);
+                          
+                          if (isHidden) return null;
+                          
+                          return (
+                            <Fragment key={key}>
+                              <th 
+                                key={`${key}-horas`}
+                                className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700 relative group"
+                              >
+                                <div className="whitespace-nowrap">
+                                  {pcp.bim_pcp_name}
+                                </div>
+                                <div className="text-xs text-gray-500 font-normal">Horas</div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id, 'horasPerdidasEmpleados');
+                                  }}
+                                  className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5"
+                                  title="Clic para ocultar esta columna"
+                                >
+                                  <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                  </svg>
+                                </button>
+                              </th>
+                              <th key={`${key}-inicio`} className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                                Hora Inicio
+                              </th>
+                              <th key={`${key}-causa`} className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                                Causa
+                              </th>
+                              <th key={`${key}-desc`} className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                                Descripción
+                              </th>
+                            </Fragment>
+                          );
+                        })
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.map((employee, index) => {
+                      let totalHours = 0;
+                      budgets.forEach(budget => {
+                        pcps.forEach(pcp => {
+                          const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                          const value = horasPerdidasEmpleadosData[key] || 0;
+                          totalHours += value;
+                        });
+                      });
+                      
+                      return (
+                        <tr key={employee.hr_employee_id} className="hover:bg-gray-50">
+                          <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900">
+                            {employee.hr_employee_name}
+                          </td>
+                          {budgets.map((budget) => (
+                            pcps.map((pcp) => {
+                              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                              const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                              const isHidden = hiddenPcpsHorasPerdidasEmpleados.has(columnKey);
+                              
+                              if (isHidden) return null;
+                              
+                              return (
+                                <Fragment key={key}>
+                                  <td key={`${key}-horas`} className="border border-gray-300 px-2 py-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      value={horasPerdidasEmpleadosData[key] || ''}
+                                      onChange={(e) => handleHorasPerdidasEmpleadosChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                      className={`w-full px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                        (horasPerdidasEmpleadosData[key] || 0) > 0 
+                                          ? 'bg-red-100' 
+                                          : 'bg-white'
+                                      }`}
+                                      placeholder=""
+                                    />
+                                  </td>
+                                  <td key={`${key}-inicio`} className="border border-gray-300 px-2 py-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="23"
+                                      step="1"
+                                      value={horasPerdidasEmpleadosHoraInicio[key] || 8}
+                                      onChange={(e) => handleHorasPerdidasEmpleadosHoraInicioChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      placeholder="8"
+                                    />
+                                  </td>
+                                  <td key={`${key}-causa`} className="border border-gray-300 px-2 py-2">
+                                    <select
+                                      value={horasPerdidasEmpleadosCausa[key] || ''}
+                                      onChange={(e) => handleHorasPerdidasEmpleadosCausaChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                      <option value="">Seleccionar...</option>
+                                      <option value="Falta de Equipo">Falta de Equipo</option>
+                                      <option value="Seguridad">Seguridad</option>
+                                      <option value="Otros">Otros</option>
+                                      <option value="Orden del cliente">Orden del cliente</option>
+                                      <option value="Falta de Materiales">Falta de Materiales</option>
+                                      <option value="Lluvia">Lluvia</option>
+                                      <option value="Inundación">Inundación</option>
+                                      <option value="Falta de Andamios">Falta de Andamios</option>
+                                      <option value="Alerta Roja">Alerta Roja</option>
+                                    </select>
+                                  </td>
+                                  <td key={`${key}-desc`} className="border border-gray-300 px-2 py-2">
+                                    <input
+                                      type="text"
+                                      value={horasPerdidasEmpleadosDescripcion[key] || ''}
+                                      onChange={(e) => handleHorasPerdidasEmpleadosDescripcionChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      placeholder="Descripción..."
+                                    />
+                                  </td>
+                                </Fragment>
+                              );
+                            })
+                          ))}
+                          <td className="border border-gray-300 px-4 py-2 text-center text-sm font-bold text-gray-900">
+                            {totalHours.toFixed(1)}h
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100 font-semibold">
+                      <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
+                        Subtotal (horas):
+                      </td>
+                      {budgets.map((budget) => (
+                        pcps.map((pcp) => {
+                          const columnKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                          const isHidden = hiddenPcpsHorasPerdidasEmpleados.has(columnKey);
+                          
+                          if (isHidden) return null;
+                          
+                          let subtotal = 0;
+                          employees.forEach(employee => {
+                            const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                            subtotal += horasPerdidasEmpleadosData[key] || 0;
+                          });
+                          
+                          return (
+                            <Fragment key={columnKey}>
+                              <td key={`${columnKey}-horas`} className="border border-gray-300 px-2 py-2 text-center">
+                                <span className="text-xs font-bold text-red-700">
+                                  {subtotal.toFixed(1)}h
+                                </span>
+                              </td>
+                              <td key={`${columnKey}-inicio`} className="border border-gray-300 px-2 py-2 text-center">
+                                <span className="text-xs text-gray-500">-</span>
+                              </td>
+                              <td key={`${columnKey}-causa`} className="border border-gray-300 px-2 py-2 text-center">
+                                <span className="text-xs text-gray-500">-</span>
+                              </td>
+                              <td key={`${columnKey}-desc`} className="border border-gray-300 px-2 py-2 text-center">
+                                <span className="text-xs text-gray-500">-</span>
+                              </td>
+                            </Fragment>
+                          );
+                        })
+                      ))}
+                      <td className="border border-gray-300 px-4 py-2 text-center">
+                        <span className="text-xs font-bold text-gray-700">
+                          -
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
 
             {/* Info de presupuestos disponibles */}
             {budgets.length > 0 && (
@@ -1443,11 +2806,11 @@ export default function Dashboard() {
             )}
             {saveSuccess && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-start">
+                  <svg className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-green-700 text-sm">{saveSuccess}</span>
+                  <span className="text-green-700 text-sm whitespace-pre-line">{saveSuccess}</span>
                 </div>
               </div>
             )}

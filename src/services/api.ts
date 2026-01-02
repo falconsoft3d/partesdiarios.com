@@ -55,9 +55,45 @@ interface Equipment {
   license_plate: string;
 }
 
+interface WorkBreakdown {
+  work_breakdown_id: number;
+  work_breakdown_name: string;
+  percentage: number;
+}
+
+interface BimElement {
+  bim_element_id: number;
+  bim_element_name: string;
+  execution_status?: string;
+}
+
+interface WorkPackage {
+  work_package_id: number;
+  work_package_name: string;
+  elements?: BimElement[];
+}
+
+interface BimInterfacePcp {
+  bim_pcp_id: number;
+  bim_pcp_name: string;
+  bim_pcp_description?: string;
+  work_breakdown?: WorkBreakdown[];
+  work_package_id?: number;
+  work_package_name?: string;
+  work_package?: WorkPackage;
+  elements?: BimElement[];
+}
+
+interface BimInterface {
+  bim_interface_id: number;
+  bim_interface_name: string;
+  pcps?: BimInterfacePcp[];
+}
+
 interface Budget {
   budget_id: number;
   budget_name: string;
+  arr_bim_interface?: BimInterface[];
 }
 
 interface DiaryPartsResponse {
@@ -274,12 +310,26 @@ class ApiService {
     diaryPartId: number,
     employees: Array<{hr_employee_id: number, hr_employee_name: string}>,
     pcps: Array<{bim_pcp_id: number, bim_pcp_name: string}>,
-    budgets: Array<{budget_id: number, budget_name: string}>,
+    budgets: Array<{budget_id: number, budget_name: string, arr_bim_interface?: any[]}>,
     pcpData: {[key: string]: number},
     observations: string,
     fileData?: {name: string, data: string},
     inasistencias?: {[employeeId: number]: boolean},
-    noTrabajoState?: boolean
+    noTrabajoState?: boolean,
+    equipments?: Array<{name: string, license_plate: string}>,
+    equipmentData?: {[key: string]: number},
+    produccionData?: {[key: string]: number},
+    produccionODT?: {[key: string]: number},
+    produccionDesglosa?: {[key: string]: number},
+    produccionExtraRows?: {[tableKey: string]: Array<{id: string; elementId: number}>},
+    horasPerdidasEmpleadosData?: {[key: string]: number},
+    horasPerdidasEmpleadosHoraInicio?: {[key: string]: number},
+    horasPerdidasEmpleadosCausa?: {[key: string]: string},
+    horasPerdidasEmpleadosDescripcion?: {[key: string]: string},
+    horasPerdidasEquiposData?: {[key: string]: number},
+    horasPerdidasEquiposHoraInicio?: {[key: string]: number},
+    horasPerdidasEquiposCausa?: {[key: string]: string},
+    horasPerdidasEquiposDescripcion?: {[key: string]: string}
   ): Promise<{status: 'ok' | 'error', message?: string}> {
     // Verificar que estamos en el cliente
     if (typeof window === 'undefined') {
@@ -383,6 +433,193 @@ class ApiService {
       // Agregar estado "dont_work" si está marcado
       if (noTrabajoState) {
         diaryPartData.state = 'dont_work';
+      }
+
+      // Procesar datos de equipos (mano de obra equipos)
+      if (equipments && equipmentData && Object.keys(equipmentData).length > 0) {
+        const equipmentLines: Array<{
+          equipment_name: string;
+          license_plate: string;
+          budget_id: number;
+          bim_pcp_id: number;
+          hh: number;
+        }> = [];
+
+        equipments.forEach(equipment => {
+          budgets.forEach(budget => {
+            pcps.forEach(pcp => {
+              const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const hours = equipmentData[key] || 0;
+              
+              if (hours > 0) {
+                equipmentLines.push({
+                  equipment_name: equipment.name,
+                  license_plate: equipment.license_plate,
+                  budget_id: budget.budget_id,
+                  bim_pcp_id: pcp.bim_pcp_id,
+                  hh: hours
+                });
+              }
+            });
+          });
+        });
+
+        if (equipmentLines.length > 0) {
+          diaryPartData.equipment_lines_ids = equipmentLines;
+        }
+      }
+
+      // Procesar datos de producción
+      if (produccionData && Object.keys(produccionData).length > 0) {
+        const produccionLines: Array<{
+          budget_id: number;
+          interface_id: number;
+          pcp_id: number;
+          element_id: number | string;
+          odt: number;
+          work_breakdown_id: number;
+          cantidad: number;
+        }> = [];
+
+        // Procesar elementos originales
+        Object.keys(produccionData).forEach(key => {
+          const cantidad = produccionData[key];
+          const odt = produccionODT?.[key] || 0;
+          const workBreakdownId = produccionDesglosa?.[key];
+          
+          // Key format: budgetId-interfaceId-pcpId-elementId
+          const parts = key.split('-');
+          if (parts.length === 4 && (cantidad > 0 || odt > 0)) {
+            const [budgetId, interfaceId, pcpId, elementId] = parts.map(Number);
+            
+            if (workBreakdownId) {
+              produccionLines.push({
+                budget_id: budgetId,
+                interface_id: interfaceId,
+                pcp_id: pcpId,
+                element_id: elementId,
+                odt: odt,
+                work_breakdown_id: Number(workBreakdownId),
+                cantidad: cantidad
+              });
+            }
+          }
+        });
+
+        // Procesar filas adicionales
+        if (produccionExtraRows) {
+          Object.keys(produccionExtraRows).forEach(tableKey => {
+            const extraRows = produccionExtraRows[tableKey];
+            extraRows.forEach(extraRow => {
+              // Buscar budget y pcp del tableKey
+              const [budgetId, pcpId] = tableKey.split('-').map(Number);
+              
+              // Buscar interfaceId del elemento
+              const budget = budgets.find(b => b.budget_id === budgetId);
+              if (budget?.arr_bim_interface) {
+                budget.arr_bim_interface.forEach((bimInt: any) => {
+                  if (bimInt.bim_interface_id) {
+                    const key = `${budgetId}-${bimInt.bim_interface_id}-${pcpId}-${extraRow.id}`;
+                    const cantidad = produccionData?.[key] || 0;
+                    const odt = produccionODT?.[key] || 0;
+                    const workBreakdownId = produccionDesglosa?.[key];
+                    
+                    if ((cantidad > 0 || odt > 0) && workBreakdownId) {
+                      produccionLines.push({
+                        budget_id: budgetId,
+                        interface_id: bimInt.bim_interface_id,
+                        pcp_id: pcpId,
+                        element_id: extraRow.elementId,
+                        odt: odt,
+                        work_breakdown_id: Number(workBreakdownId),
+                        cantidad: cantidad
+                      });
+                    }
+                  }
+                });
+              }
+            });
+          });
+        }
+
+        if (produccionLines.length > 0) {
+          diaryPartData.produccion_lines_ids = produccionLines;
+        }
+      }
+
+      // Procesar horas perdidas de empleados
+      if (horasPerdidasEmpleadosData && Object.keys(horasPerdidasEmpleadosData).length > 0) {
+        const horasPerdidasEmpleadosLines: Array<{
+          hr_employee_id: number;
+          budget_id: number;
+          bim_pcp_id: number;
+          hora_inicio: number;
+          horas_perdidas: number;
+          causa: string;
+          descripcion: string;
+        }> = [];
+
+        Object.keys(horasPerdidasEmpleadosData).forEach(key => {
+          const horasPerdidas = horasPerdidasEmpleadosData[key];
+          if (horasPerdidas > 0) {
+            const parts = key.split('-').map(Number);
+            if (parts.length === 3) {
+              const [employeeId, budgetId, pcpId] = parts;
+              horasPerdidasEmpleadosLines.push({
+                hr_employee_id: employeeId,
+                budget_id: budgetId,
+                bim_pcp_id: pcpId,
+                hora_inicio: horasPerdidasEmpleadosHoraInicio?.[key] || 0,
+                horas_perdidas: horasPerdidas,
+                causa: horasPerdidasEmpleadosCausa?.[key] || '',
+                descripcion: horasPerdidasEmpleadosDescripcion?.[key] || ''
+              });
+            }
+          }
+        });
+
+        if (horasPerdidasEmpleadosLines.length > 0) {
+          diaryPartData.horas_perdidas_empleados_ids = horasPerdidasEmpleadosLines;
+        }
+      }
+
+      // Procesar horas perdidas de equipos
+      if (horasPerdidasEquiposData && Object.keys(horasPerdidasEquiposData).length > 0) {
+        const horasPerdidasEquiposLines: Array<{
+          license_plate: string;
+          budget_id: number;
+          bim_pcp_id: number;
+          hora_inicio: number;
+          horas_perdidas: number;
+          causa: string;
+          descripcion: string;
+        }> = [];
+
+        Object.keys(horasPerdidasEquiposData).forEach(key => {
+          const horasPerdidas = horasPerdidasEquiposData[key];
+          if (horasPerdidas > 0) {
+            // Key format: license_plate-budgetId-pcpId
+            const lastHyphenIndex = key.lastIndexOf('-');
+            const secondLastHyphenIndex = key.lastIndexOf('-', lastHyphenIndex - 1);
+            const licensePlate = key.substring(0, secondLastHyphenIndex);
+            const budgetId = parseInt(key.substring(secondLastHyphenIndex + 1, lastHyphenIndex));
+            const pcpId = parseInt(key.substring(lastHyphenIndex + 1));
+            
+            horasPerdidasEquiposLines.push({
+              license_plate: licensePlate,
+              budget_id: budgetId,
+              bim_pcp_id: pcpId,
+              hora_inicio: horasPerdidasEquiposHoraInicio?.[key] || 0,
+              horas_perdidas: horasPerdidas,
+              causa: horasPerdidasEquiposCausa?.[key] || '',
+              descripcion: horasPerdidasEquiposDescripcion?.[key] || ''
+            });
+          }
+        });
+
+        if (horasPerdidasEquiposLines.length > 0) {
+          diaryPartData.horas_perdidas_equipos_ids = horasPerdidasEquiposLines;
+        }
       }
 
       console.log('Final diary part data:', {
@@ -630,4 +867,4 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
-export type { LoginRequest, LoginResponse, ApiError, DiaryPart, EmployeeLine, DiaryPartsResponse, PCP, Employee, Equipment, Budget };
+export type { LoginRequest, LoginResponse, ApiError, DiaryPart, EmployeeLine, DiaryPartsResponse, PCP, Employee, Equipment, Budget, BimInterface, BimInterfacePcp, WorkBreakdown, BimElement, WorkPackage };

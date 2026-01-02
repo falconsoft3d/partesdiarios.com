@@ -15,12 +15,15 @@ interface HistoryEntry {
   budgetsCount: number;
   totalHours: number;
   textData: string;
+  downloadJson?: any;
+  uploadJson?: any;
 }
 
 export default function HistoryPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
+  const [viewMode, setViewMode] = useState<'text' | 'downloadJson' | 'uploadJson'>('text');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -30,22 +33,56 @@ export default function HistoryPage() {
 
   useEffect(() => {
     loadHistory();
+    
+    // Escuchar cambios en el localStorage desde otras pestañas/componentes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'diary_parts_history') {
+        console.log('🔄 Historial actualizado desde otro componente, recargando...');
+        loadHistory();
+      }
+    };
+    
+    // Escuchar cuando la pestaña se vuelve visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('👁️ Pestaña visible, recargando historial...');
+        loadHistory();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const loadHistory = () => {
     if (typeof window !== 'undefined') {
       try {
         const savedHistory = localStorage.getItem('diary_parts_history');
+        console.log('🔍 Historial cargado desde localStorage');
+        
         if (savedHistory) {
           const parsed = JSON.parse(savedHistory);
+          console.log('🔍 Total de entradas en historial:', parsed.length);
+          
           // Ordenar por fecha más reciente primero
           parsed.sort((a: HistoryEntry, b: HistoryEntry) => 
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           );
+          
           setHistory(parsed);
+          console.log('✅ Historial cargado exitosamente');
+        } else {
+          console.log('⚠️ No hay historial en localStorage');
+          setHistory([]);
         }
       } catch (error) {
-        console.error('Error loading history:', error);
+        console.error('❌ Error loading history:', error);
+        setHistory([]);
       }
     }
   };
@@ -75,6 +112,23 @@ export default function HistoryPage() {
     const a = document.createElement('a');
     a.href = url;
     a.download = `parte_${entry.partName}_${entry.date}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadJson = (entry: HistoryEntry, type: 'download' | 'upload') => {
+    const jsonData = type === 'download' ? entry.downloadJson : entry.uploadJson;
+    if (!jsonData) {
+      alert(`No hay JSON de ${type === 'download' ? 'bajada' : 'subida'} disponible`);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `parte_${entry.partName}_${entry.date}_${type === 'download' ? 'bajada' : 'subida'}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -192,13 +246,36 @@ export default function HistoryPage() {
                     <h2 className="text-xl font-bold text-gray-900">
                       {selectedEntry.partName}
                     </h2>
-                    <button
-                      onClick={() => handleDownloadEntry(selectedEntry)}
-                      className="flex items-center space-x-2 px-4 py-2 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                    >
-                      <Download className="h-5 w-5" />
-                      <span>Descargar</span>
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleDownloadEntry(selectedEntry)}
+                        className="flex items-center space-x-2 px-3 py-2 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors text-sm"
+                        title="Descargar texto"
+                      >
+                        <Download className="h-4 w-4" />
+                        <span>TXT</span>
+                      </button>
+                      {selectedEntry.downloadJson && (
+                        <button
+                          onClick={() => handleDownloadJson(selectedEntry, 'download')}
+                          className="flex items-center space-x-2 px-3 py-2 text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors text-sm"
+                          title="Descargar JSON de bajada"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Bajada</span>
+                        </button>
+                      )}
+                      {selectedEntry.uploadJson && (
+                        <button
+                          onClick={() => handleDownloadJson(selectedEntry, 'upload')}
+                          className="flex items-center space-x-2 px-3 py-2 text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors text-sm"
+                          title="Descargar JSON de subida"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Subida</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="mb-4 pb-4 border-b border-gray-200">
                     <p className="text-sm text-gray-600">
@@ -211,9 +288,50 @@ export default function HistoryPage() {
                       <strong>ID:</strong> {selectedEntry.partId}
                     </p>
                   </div>
+                  
+                  {/* Pestañas para cambiar entre texto y JSONs */}
+                  <div className="flex space-x-2 mb-4 border-b border-gray-200">
+                    <button
+                      onClick={() => setViewMode('text')}
+                      className={`px-4 py-2 font-semibold text-sm transition-colors ${
+                        viewMode === 'text'
+                          ? 'text-blue-600 border-b-2 border-blue-600'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      📄 Texto
+                    </button>
+                    {selectedEntry.downloadJson && (
+                      <button
+                        onClick={() => setViewMode('downloadJson')}
+                        className={`px-4 py-2 font-semibold text-sm transition-colors ${
+                          viewMode === 'downloadJson'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        📥 JSON Bajada
+                      </button>
+                    )}
+                    {selectedEntry.uploadJson && (
+                      <button
+                        onClick={() => setViewMode('uploadJson')}
+                        className={`px-4 py-2 font-semibold text-sm transition-colors ${
+                          viewMode === 'uploadJson'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        📤 JSON Subida
+                      </button>
+                    )}
+                  </div>
+
                   <div className="bg-gray-50 rounded-lg p-4">
                     <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono overflow-auto max-h-[600px]">
-                      {selectedEntry.textData}
+                      {viewMode === 'text' && selectedEntry.textData}
+                      {viewMode === 'downloadJson' && selectedEntry.downloadJson && JSON.stringify(selectedEntry.downloadJson, null, 2)}
+                      {viewMode === 'uploadJson' && selectedEntry.uploadJson && JSON.stringify(selectedEntry.uploadJson, null, 2)}
                     </pre>
                   </div>
                 </div>
