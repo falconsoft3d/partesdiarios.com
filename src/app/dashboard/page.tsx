@@ -709,10 +709,12 @@ export default function Dashboard() {
     if (typeof window !== 'undefined') {
       try {
         // Generar el texto formateado
-        let textData = `📥 PARTE DESCARGADO\n`;
+        let textData = `📥 PARTE DESCARGADO
+`;
         textData += `PARTE DIARIO: ${diaryPartName}\n`;
         textData += `FECHA: ${diaryPartDate}\n`;
         textData += `ID: ${diaryPartId}\n`;
+        textData += `ESTADO: BAJADO\n`;
         textData += `DESCARGADO: ${new Date().toLocaleString('es-ES')}\n`;
         textData += `\n${'='.repeat(80)}\n\n`;
         
@@ -748,7 +750,8 @@ export default function Dashboard() {
           budgetsCount: budgets.length,
           totalHours: 0,
           textData,
-          action: 'download'
+          action: 'download',
+          estado: 'BAJADO'
         };
 
         // Obtener historial existente
@@ -779,6 +782,7 @@ export default function Dashboard() {
         textData += `PARTE DIARIO: ${diaryPartName}\n`;
         textData += `FECHA: ${diaryPartDate}\n`;
         textData += `ID: ${diaryPartId}\n`;
+        textData += `ESTADO: CARGADO\n`;
         textData += `GUARDADO: ${new Date().toLocaleString('es-ES')}\n`;
         textData += `\n${'='.repeat(80)}\n\n`;
         
@@ -1071,7 +1075,8 @@ export default function Dashboard() {
           textData,
           action: 'upload',
           downloadJson: downloadJson,
-          uploadJson: uploadJson
+          uploadJson: uploadJson,
+          estado: 'CARGADO'
         };
 
         console.log('📝 Guardando entrada en historial:', {
