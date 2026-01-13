@@ -2258,7 +2258,7 @@ export default function Dashboard() {
                           })
                         ))}
                         <td className="border border-gray-300 px-4 py-2 text-center text-sm font-bold text-gray-900">
-                          {(8 - totalHours).toFixed(1)}
+                          {Math.max(0, 8 - totalHours).toFixed(1)}
                         </td>
                       </tr>
                     );
