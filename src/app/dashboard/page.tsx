@@ -281,7 +281,7 @@ export default function Dashboard() {
 
   const handlePcpChange = (employeeId: number, employeeIndex: number, budgetId: number, pcpId: number, value: string) => {
     const key = `${employeeId}-${employeeIndex}-${budgetId}-${pcpId}`;
-    const numValue = Number(value) || 0;
+    const numValue = Math.max(0, Number(value) || 0);
     
     setPcpData(prev => ({
       ...prev,
@@ -301,7 +301,7 @@ export default function Dashboard() {
     const key = `${licensePlate}-${budgetId}-${pcpId}`;
     setEquipmentData(prev => ({
       ...prev,
-      [key]: Number(value) || 0
+      [key]: Math.max(0, Number(value) || 0)
     }));
   };
 
@@ -1985,6 +1985,7 @@ export default function Dashboard() {
                                   min="0"
                                   value={pcpData[key] || ''}
                                   onChange={(e) => handlePcpChange(employee.hr_employee_id, employeeIndex, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                                   className={`w-12 px-1 py-1 border rounded text-sm text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none ${
                                     (pcpData[key] || 0) > 0 
                                       ? (isDarkMode ? 'bg-yellow-900 border-yellow-700 text-yellow-100' : 'bg-yellow-100 border-gray-300 text-gray-900')
@@ -2246,6 +2247,7 @@ export default function Dashboard() {
                                   step="0.5"
                                   value={equipmentData[key] || ''}
                                   onChange={(e) => handleEquipmentChange(equipment.license_plate, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                                   className={`w-full px-2 py-1 border border-gray-300 rounded text-center text-sm text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                                     (equipmentData[key] || 0) > 0 
                                       ? 'bg-yellow-100' 
