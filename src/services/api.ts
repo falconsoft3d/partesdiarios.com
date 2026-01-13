@@ -117,6 +117,7 @@ interface DiaryPartsResponse {
   pcps?: PCP[];
   employees?: Employee[];
   equipments?: Equipment[];
+  all_equipments?: Equipment[];
   budgets?: Budget[];
 }
 

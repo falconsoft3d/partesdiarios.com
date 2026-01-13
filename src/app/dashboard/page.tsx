@@ -10,6 +10,9 @@ export default function Dashboard() {
   const [pcps, setPcps] = useState<PCP[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [equipments, setEquipments] = useState<Equipment[]>([]);
+  const [allEquipments, setAllEquipments] = useState<Equipment[]>([]);
+  const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
+  const [equipmentSearchTerm, setEquipmentSearchTerm] = useState('');
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [diaryPartId, setDiaryPartId] = useState<number | null>(null);
   const [diaryPartName, setDiaryPartName] = useState<string>('');
@@ -132,6 +135,7 @@ export default function Dashboard() {
         pcps,
         employees,
         equipments,
+        allEquipments,
         budgets,
         diaryPartId,
         diaryPartName,
@@ -167,7 +171,7 @@ export default function Dashboard() {
       };
       localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
     }
-  }, [pcps, employees, equipments, budgets, diaryPartId, diaryPartName, diaryPartDate, diaryPartTurno, diaryPartSupervisor, diaryPartFramework, diaryPartResponsable, diaryPartDisciplina, diaryPartArea, diaryPartUbicacion, cantPartesAbiertos, pcpData, equipmentData, horasPerdidasEmpleadosData, horasPerdidasEquiposData, horasPerdidasEmpleadosHoraInicio, horasPerdidasEquiposHoraInicio, horasPerdidasEmpleadosCausa, horasPerdidasEquiposCausa, horasPerdidasEmpleadosDescripcion, horasPerdidasEquiposDescripcion, horasPerdidasTab, produccionData, produccionEstatus, produccionODT, produccionDesglosa, observations, inasistencias, noTrabajoState, attachments]);
+  }, [pcps, employees, equipments, allEquipments, budgets, diaryPartId, diaryPartName, diaryPartDate, diaryPartTurno, diaryPartSupervisor, diaryPartFramework, diaryPartResponsable, diaryPartDisciplina, diaryPartArea, diaryPartUbicacion, cantPartesAbiertos, pcpData, equipmentData, horasPerdidasEmpleadosData, horasPerdidasEquiposData, horasPerdidasEmpleadosHoraInicio, horasPerdidasEquiposHoraInicio, horasPerdidasEmpleadosCausa, horasPerdidasEquiposCausa, horasPerdidasEmpleadosDescripcion, horasPerdidasEquiposDescripcion, horasPerdidasTab, produccionData, produccionEstatus, produccionODT, produccionDesglosa, observations, inasistencias, noTrabajoState, attachments]);
 
   // Cargar datos del localStorage al montar el componente
   useEffect(() => {
@@ -199,6 +203,37 @@ export default function Dashboard() {
       setHiddenPcpsHorasPerdidasEquipos(new Set(hiddenKeys));
     }
   }, [pcps, budgets]);
+
+  // Sincronizar el estado del checkbox general de inasistencias
+  useEffect(() => {
+    if (employees.length > 0) {
+      // Identificar empleados sin horas
+      const empleadosSinHoras: number[] = [];
+      employees.forEach((employee, employeeIndex) => {
+        let hasHoras = false;
+        budgets.forEach(budget => {
+          pcps.forEach(pcp => {
+            const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+            if (pcpData[key] > 0) {
+              hasHoras = true;
+            }
+          });
+        });
+        
+        if (!hasHoras) {
+          empleadosSinHoras.push(employee.hr_employee_id);
+        }
+      });
+      
+      // Verificar si todos los empleados sin horas están marcados
+      if (empleadosSinHoras.length > 0) {
+        const todosLosSinHorasMarcados = empleadosSinHoras.every(empId => inasistencias[empId]);
+        setAllInasistenciasChecked(todosLosSinHorasMarcados);
+      } else {
+        setAllInasistenciasChecked(false);
+      }
+    }
+  }, [employees, pcps, budgets, pcpData, inasistencias]);
 
   // Colapsar todas las tablas de producción por defecto
   useEffect(() => {
@@ -232,8 +267,26 @@ export default function Dashboard() {
       
       if (result.status === 'ok' && result.pcps && result.employees) {
         setPcps(result.pcps || []);
-        setEmployees(result.employees || []);
-        setEquipments(result.equipments || []);
+        
+        // Deduplicar empleados por hr_employee_id
+        const uniqueEmployees = result.employees?.reduce((acc: Employee[], employee: Employee) => {
+          if (!acc.find(e => e.hr_employee_id === employee.hr_employee_id)) {
+            acc.push(employee);
+          }
+          return acc;
+        }, []) || [];
+        
+        // Deduplicar equipos por license_plate
+        const uniqueEquipments = result.equipments?.reduce((acc: Equipment[], equipment: Equipment) => {
+          if (!acc.find(e => e.license_plate === equipment.license_plate)) {
+            acc.push(equipment);
+          }
+          return acc;
+        }, []) || [];
+        
+        setEmployees(uniqueEmployees);
+        setEquipments(uniqueEquipments);
+        setAllEquipments(result.all_equipments || []);
         setBudgets(result.budgets || []);
         // Guardar la información del parte diario
         setDiaryPartId(result.part_id || null);
@@ -496,11 +549,11 @@ export default function Dashboard() {
   };
 
   const handleToggleAllInasistencias = () => {
-    const newValue = !allInasistenciasChecked;
     const newInasistencias: {[key: number]: boolean} = {};
     
+    // Primero, identificar empleados que NO tienen horas asignadas
+    const empleadosSinHoras: number[] = [];
     employees.forEach((employee, employeeIndex) => {
-      // Verificar si este empleado tiene horas asignadas en algún PCP
       let hasHoras = false;
       budgets.forEach(budget => {
         pcps.forEach(pcp => {
@@ -511,12 +564,34 @@ export default function Dashboard() {
         });
       });
       
-      // Solo marcar/desmarcar si el empleado NO tiene horas asignadas
+      if (!hasHoras) {
+        empleadosSinHoras.push(employee.hr_employee_id);
+      }
+    });
+    
+    // Verificar si todos los empleados sin horas ya están marcados
+    const todosLosSinHorasMarcados = empleadosSinHoras.every(empId => inasistencias[empId]);
+    
+    // Si todos están marcados, desmarcar todos. Si no, marcar todos los que no tienen horas
+    const newValue = !todosLosSinHorasMarcados;
+    
+    employees.forEach((employee, employeeIndex) => {
+      let hasHoras = false;
+      budgets.forEach(budget => {
+        pcps.forEach(pcp => {
+          const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+          if (pcpData[key] > 0) {
+            hasHoras = true;
+          }
+        });
+      });
+      
+      // Solo modificar empleados sin horas
       if (!hasHoras) {
         newInasistencias[employee.hr_employee_id] = newValue;
       } else {
-        // Mantener el valor actual si tiene horas
-        newInasistencias[employee.hr_employee_id] = inasistencias[employee.hr_employee_id] || false;
+        // Mantener el valor actual si tiene horas (no debería estar marcado, pero por si acaso)
+        newInasistencias[employee.hr_employee_id] = false;
       }
     });
     
@@ -563,8 +638,26 @@ export default function Dashboard() {
         if (savedData) {
           const parsed = JSON.parse(savedData);
           setPcps(parsed.pcps || []);
-          setEmployees(parsed.employees || []);
-          setEquipments(parsed.equipments || []);
+          
+          // Deduplicar empleados por hr_employee_id al cargar
+          const uniqueEmployees = parsed.employees?.reduce((acc: Employee[], employee: Employee) => {
+            if (!acc.find(e => e.hr_employee_id === employee.hr_employee_id)) {
+              acc.push(employee);
+            }
+            return acc;
+          }, []) || [];
+          
+          // Deduplicar equipos por license_plate al cargar
+          const uniqueEquipments = parsed.equipments?.reduce((acc: Equipment[], equipment: Equipment) => {
+            if (!acc.find(e => e.license_plate === equipment.license_plate)) {
+              acc.push(equipment);
+            }
+            return acc;
+          }, []) || [];
+          
+          setEmployees(uniqueEmployees);
+          setEquipments(uniqueEquipments);
+          setAllEquipments(parsed.allEquipments || []);
           setBudgets(parsed.budgets || []);
           setDiaryPartId(parsed.diaryPartId || null);
           setDiaryPartName(parsed.diaryPartName || '');
@@ -1865,14 +1958,13 @@ export default function Dashboard() {
                     <th className={`border px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`} rowSpan={2}>
                       Empleado
                     </th>
-                    <th className={`border px-4 py-3 text-center text-sm font-medium cursor-pointer ${isDarkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`} title="Click para marcar/desmarcar todas las inasistencias" rowSpan={2} onClick={handleToggleAllInasistencias}>
+                    <th className={`border px-4 py-3 text-center text-sm font-medium ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`} title="Click para marcar/desmarcar todas las inasistencias (solo empleados sin horas asignadas)" rowSpan={2}>
                       <div className="flex items-center justify-center space-x-1">
                         <input
                           type="checkbox"
                           checked={allInasistenciasChecked}
                           onChange={handleToggleAllInasistencias}
                           className={`w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
-                          onClick={(e) => e.stopPropagation()}
                         />
                         <span>I</span>
                       </div>
@@ -2154,6 +2246,9 @@ export default function Dashboard() {
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-blue-50">
+                    <th className="border border-gray-300 px-2 py-3 text-center text-sm font-medium text-gray-700" rowSpan={2}>
+                      
+                    </th>
                     <th className="border border-gray-300 px-4 py-3 text-left text-sm font-medium text-gray-700" rowSpan={2}>
                       Placa
                     </th>
@@ -2225,6 +2320,28 @@ export default function Dashboard() {
                     
                     return (
                       <tr key={`${equipment.license_plate}-${equipmentIndex}`} className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-2 py-2 text-center">
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Eliminar ${equipment.license_plate} de la lista?`)) {
+                                setEquipments(equipments.filter(e => e.license_plate !== equipment.license_plate));
+                                // Limpiar datos asociados
+                                const newEquipmentData = { ...equipmentData };
+                                budgets.forEach(budget => {
+                                  pcps.forEach(pcp => {
+                                    const key = `${equipment.license_plate}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                                    delete newEquipmentData[key];
+                                  });
+                                });
+                                setEquipmentData(newEquipmentData);
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
+                            title="Eliminar equipo"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                           {equipment.license_plate}
                         </td>
@@ -2268,7 +2385,7 @@ export default function Dashboard() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-100 font-semibold">
-                    <td colSpan={2} className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
+                    <td colSpan={3} className="border border-gray-300 px-4 py-2 text-sm text-gray-900 text-right">
                       Subtotal (horas):
                     </td>
                     {budgets.map((budget) => (
@@ -2301,6 +2418,19 @@ export default function Dashboard() {
                   </tr>
                 </tfoot>
               </table>
+              
+              {/* Botón para agregar equipo */}
+              <div className="mt-3 flex justify-start">
+                <button
+                  onClick={() => setShowAddEquipmentModal(true)}
+                  className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Agregar Equipo</span>
+                </button>
+              </div>
             </div>
 
             {/* Info de presupuestos disponibles */}
@@ -3149,6 +3279,67 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Modal para agregar equipos */}
+        {showAddEquipmentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Agregar Equipo</h3>
+                <button
+                  onClick={() => {
+                    setShowAddEquipmentModal(false);
+                    setEquipmentSearchTerm('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                <p className="text-sm text-gray-600 mb-4">Selecciona un equipo para agregarlo a la lista:</p>
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre o matrícula..."
+                      value={equipmentSearchTerm}
+                      onChange={(e) => setEquipmentSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-600 placeholder:text-gray-400"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {allEquipments
+                    .filter(eq => !equipments.some(e => e.license_plate === eq.license_plate))
+                    .filter(eq => 
+                      equipmentSearchTerm === '' ||
+                      eq.license_plate.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
+                      eq.name.toLowerCase().includes(equipmentSearchTerm.toLowerCase())
+                    )
+                    .map((equipment) => (
+                    <button
+                      key={equipment.license_plate}
+                      onClick={() => {
+                        setEquipments([...equipments, equipment]);
+                        setShowAddEquipmentModal(false);
+                        setEquipmentSearchTerm('');
+                      }}
+                      className="w-full p-3 border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition-colors text-left"
+                    >
+                      <div className="font-medium text-gray-900">{equipment.license_plate}</div>
+                      <div className="text-sm text-gray-600">{equipment.name}</div>
+                    </button>
+                  ))}
+                  {allEquipments.filter(eq => !equipments.some(e => e.license_plate === eq.license_plate)).length === 0 && (
+                    <p className="text-center text-gray-500 py-4">No hay equipos disponibles para agregar</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="mt-8 text-center pb-4">

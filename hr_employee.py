@@ -105,7 +105,9 @@ class DiaryPartPwa(http.Controller):
             return {'status': 'error', 'message': 'Credenciales incorrectas'}
 
         # de la fecha de hoy restamos 3 dias para buscar partes recientes
-        date_minus_3 = date.today() -  timedelta(days=3)
+        date_minus_3 = date.today() - timedelta(days=3)
+
+
 
         arr_search = [
             ('hr_employee_id', '=', hr_employee.id),
@@ -113,7 +115,11 @@ class DiaryPartPwa(http.Controller):
             ('state_load', '=', 'sin_cargar')
         ]
 
-        count_arr_search = len(arr_search)
+        diary_parts_3 = request.env['diary.part'].sudo().search(arr_search,  order='date asc')
+
+        count_arr_search = len(diary_parts_3)
+
+        _logger.info(":::::::::: begin load_part ::::::::::")
 
         _logger.info(f"search domain: {arr_search}")
 
@@ -125,13 +131,7 @@ class DiaryPartPwa(http.Controller):
         if diary_parts:
             part_id = diary_parts[-1]
         else:
-            # bajas el parte de hoy en estado borrador
-            part_id = request.env['diary.part'].sudo().search([
-                ('hr_employee_id', '=', hr_employee.id),
-            ], limit=1, order='date desc')
-
-            if not part_id:
-                return {'status': 'error', 'message': 'No hay parte para hoy en estado borrador'}
+            return {'status': 'error', 'message': 'No hay parte para hoy en estado borrador'}
 
         # Cargamos los PCP de la plantilla de recursos
         pcps = []
@@ -144,20 +144,37 @@ class DiaryPartPwa(http.Controller):
 
         # vamos a buscar los empleados de la brigada asociada del parte
         employees = []
-        for line in part_id.bim_resource_template_id.line_ids:
+
+        for line in part_id.employee_lines_ids:
             employees.append({
                 'hr_employee_id': line.hr_employee_id.id,
                 'hr_employee_name': line.hr_employee_id.name,
             })
+
         employees = sorted(employees, key=lambda x: x['hr_employee_name'])
 
         equipments = []
-        for line in part_id.bim_resource_template_id.line_eq_ids:
+        # equip_ids
+        for line in part_id.equip_ids:
             equipments.append({
                 'name': line.fleet_vehicle_id.name,
                 'license_plate': line.fleet_vehicle_id.license_plate,
             })
         equipments = sorted(equipments, key=lambda x: x['license_plate'])
+
+        all_equipments = []
+
+        fleet_vehicle_ids = request.env['fleet.vehicle'].sudo().search([
+            ('framework_contract_id', '=', part_id.framework_contract_id.id,)
+        ])
+
+        for fleet_vehicle in fleet_vehicle_ids:
+            all_equipments.append({
+                'name': fleet_vehicle.name,
+                'license_plate': fleet_vehicle.license_plate,
+            })
+
+
 
         # Vamos a buscar los presupuestos
         budgets = []
@@ -267,6 +284,7 @@ class DiaryPartPwa(http.Controller):
             'pcps': pcps,
             'employees': employees,
             'equipments': equipments,
+            'all_equipments': all_equipments,
             'budgets': budgets,
             'turno': part_id.employee_shift_id.name,
             'framework_contract_id': part_id.framework_contract_id.name,
@@ -572,6 +590,12 @@ class DiaryPartPwa(http.Controller):
             equip_count = len(diary_part.equip_ids)
             employee_count = len(diary_part.employee_lines_ids)
             lost_hour_count = len(diary_part.lost_hour_ids)
+
+            # Paso el parte a cargado
+            diary_part.sudo().to_loaded()
+
+
+
             _logger.info(f"✅ Verificación FINAL - Empleados: {employee_count}, Equipos: {equip_count}, Producción: {lines_count}, Horas Perdidas: {lost_hour_count}")
 
         except Exception as e:
