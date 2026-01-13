@@ -2436,6 +2436,7 @@ export default function Dashboard() {
                                   self.findIndex(e => e.bim_element_id === element.bim_element_id) === index
                                 )
                                 .filter(element => {
+                                  if (!element.bim_element_name) return false;
                                   const searchTerm = (elementSearchTerm[tableKey] || '').toLowerCase();
                                   return element.bim_element_name.toLowerCase().includes(searchTerm);
                                 })
