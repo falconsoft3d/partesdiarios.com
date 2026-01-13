@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { apiService, PCP, Employee, Equipment, Budget, BimInterface, BimInterfacePcp, WorkBreakdown, BimElement, WorkPackage } from '@/services/api';
-import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle, Lock } from 'lucide-react';
+import { Settings, LogOut, Download, AlertCircle, Upload, Trash2, HelpCircle, Lock, Filter, Search, X } from 'lucide-react';
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading, connection, logout } = useAuth();
@@ -21,6 +21,8 @@ export default function Dashboard() {
   const [diaryPartDisciplina, setDiaryPartDisciplina] = useState<string>('');
   const [diaryPartArea, setDiaryPartArea] = useState<string>('');
   const [diaryPartUbicacion, setDiaryPartUbicacion] = useState<string>('');
+  const [diaryPartCodBrigada, setDiaryPartCodBrigada] = useState<string>('');
+  const [diaryPartNameBrigada, setDiaryPartNameBrigada] = useState<string>('');
   const [cantPartesAbiertos, setCantPartesAbiertos] = useState<number>(0);
   const [loadingParts, setLoadingParts] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,9 @@ export default function Dashboard() {
   const [produccionDesglosa, setProduccionDesglosa] = useState<{[key: string]: number}>({});
   const [collapsedProduccionTables, setCollapsedProduccionTables] = useState<Set<string>>(new Set());
   const [produccionExtraRows, setProduccionExtraRows] = useState<{[tableKey: string]: Array<{id: string; elementId: number}>}>({});
+  const [visibleElements, setVisibleElements] = useState<{[tableKey: string]: Set<number>}>({});
+  const [showElementFilter, setShowElementFilter] = useState<{[tableKey: string]: boolean}>({});
+  const [elementSearchTerm, setElementSearchTerm] = useState<{[tableKey: string]: string}>({});
   const [allInasistenciasChecked, setAllInasistenciasChecked] = useState(false);
   const [isPartInfoCollapsed, setIsPartInfoCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -195,6 +200,22 @@ export default function Dashboard() {
     }
   }, [pcps, budgets]);
 
+  // Colapsar todas las tablas de producción por defecto
+  useEffect(() => {
+    if (pcps.length > 0 && budgets.length > 0) {
+      const collapsedKeys = new Set<string>();
+      
+      budgets.forEach(budget => {
+        pcps.forEach(pcp => {
+          // Colapsar todas las tablas
+          collapsedKeys.add(`${budget.budget_id}-${pcp.bim_pcp_id}`);
+        });
+      });
+      
+      setCollapsedProduccionTables(collapsedKeys);
+    }
+  }, [pcps, budgets]);
+
   const handleLoadPart = async () => {
     if (!connection) return;
     
@@ -225,6 +246,8 @@ export default function Dashboard() {
         setDiaryPartDisciplina(result.diciplina || '');
         setDiaryPartArea(result.area || '');
         setDiaryPartUbicacion(result.ubicacion || '');
+        setDiaryPartCodBrigada(result.cod_brigada || '');
+        setDiaryPartNameBrigada(result.name_brigada || '');
         setCantPartesAbiertos(result.cant_partes_abiertos || 0);
         // Cargar el estado "dont_work" si viene del backend
         setNoTrabajoState(result.state === 'dont_work');
@@ -379,6 +402,54 @@ export default function Dashboard() {
       }
       return newSet;
     });
+  };
+
+  const toggleElementFilter = (tableKey: string) => {
+    setShowElementFilter(prev => ({
+      ...prev,
+      [tableKey]: !prev[tableKey]
+    }));
+  };
+
+  const toggleElementVisibility = (tableKey: string, elementId: number) => {
+    setVisibleElements(prev => {
+      const currentSet = prev[tableKey] || new Set<number>();
+      const newSet = new Set(currentSet);
+      
+      if (newSet.has(elementId)) {
+        newSet.delete(elementId);
+      } else {
+        newSet.add(elementId);
+      }
+      
+      return {
+        ...prev,
+        [tableKey]: newSet
+      };
+    });
+  };
+
+  const selectAllElements = (tableKey: string, allElementIds: number[]) => {
+    setVisibleElements(prev => ({
+      ...prev,
+      [tableKey]: new Set(allElementIds)
+    }));
+  };
+
+  const deselectAllElements = (tableKey: string) => {
+    setVisibleElements(prev => ({
+      ...prev,
+      [tableKey]: new Set<number>()
+    }));
+  };
+
+  const isElementVisible = (tableKey: string, elementId: number): boolean => {
+    const visibleSet = visibleElements[tableKey];
+    // Si no hay filtro definido (undefined), mostrar todos
+    if (visibleSet === undefined) return true;
+    // Si hay filtro definido pero está vacío, no mostrar ninguno
+    if (visibleSet.size === 0) return false;
+    return visibleSet.has(elementId);
   };
 
   const handleObservationChange = (value: string) => {
@@ -1443,7 +1514,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Parte Offline: {connection.employeeName || connection.username}
+                Parte Diario: {connection.employeeName || connection.username}
               </h1>
               <p className={isDarkMode ? 'text-gray-300' : 'text-gray-600'}>
                 Conectado a: <span className="font-medium">{connection.url}</span>
@@ -1522,67 +1593,81 @@ export default function Dashboard() {
           <div className={`rounded-2xl shadow-xl p-6 mt-3 transition-colors duration-300 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Información del Parte</h2>
-              <button
-                onClick={togglePartInfoCollapse}
-                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-blue-400 hover:bg-gray-700' : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'}`}
-                title={isPartInfoCollapsed ? 'Expandir' : 'Minimizar'}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className={`h-5 w-5 transition-transform duration-300 ${isPartInfoCollapsed ? 'rotate-180' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+              <div className="flex items-center space-x-3">
+                <img src="/logo.png" alt="Logo" className="h-20 w-20 object-contain" />
+                <button
+                  onClick={togglePartInfoCollapse}
+                  className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-gray-300 hover:text-blue-400 hover:bg-gray-700' : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'}`}
+                  title={isPartInfoCollapsed ? 'Expandir' : 'Minimizar'}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-5 w-5 transition-transform duration-300 ${isPartInfoCollapsed ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className={`space-y-3 transition-all duration-300 overflow-hidden ${isPartInfoCollapsed ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
-              {/* Framework Contract, Responsable, Parte y Turno */}
-              {diaryPartFramework && (
-                <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
-                  <div className="flex items-center space-x-4">
+              {/* Grid de 2x2 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Fila 1, Columna 1: Framework Contract y Responsable */}
+                {diaryPartFramework && (
+                  <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
                     <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                       [{diaryPartFramework}]{diaryPartResponsable && `, RESPONSABLE: ${diaryPartResponsable}`}
                     </p>
                   </div>
-                </div>
-              )}
-              
-              {/* Código del Parte y Turno */}
-              <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
-                <div className="flex items-center space-x-4">
-                  <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    {diaryPartName || 'Parte Diario'}
-                  </h3>
-                  {diaryPartTurno && (
-                    <div className={`px-3 py-1 border rounded ${isDarkMode ? 'bg-blue-900 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-gray-900'}`}>
-                      <p className="text-sm font-semibold">
-                        {diaryPartTurno}
-                      </p>
-                    </div>
-                  )}
-                  {cantPartesAbiertos > 0 && (
-                    <div className={`px-3 py-1 border rounded ${isDarkMode ? 'bg-orange-900 border-orange-700 text-orange-100' : 'bg-orange-50 border-orange-300 text-gray-900'}`}>
-                      <p className="text-sm font-semibold">
-                        Cant Partes: {cantPartesAbiertos}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Disciplina, Área y Ubicación */}
-              {(diaryPartDisciplina || diaryPartArea || diaryPartUbicacion) && (
+                )}
+                
+                {/* Fila 1, Columna 2: Código del Parte y Turno */}
                 <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
-                  <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                    {diaryPartDisciplina && `DISCP: ${diaryPartDisciplina}`}
-                    {diaryPartArea && `, AREA: ${diaryPartArea}`}
-                    {diaryPartUbicacion && `, UBIC: ${diaryPartUbicacion}`}
-                  </p>
+                  <div className="flex items-center space-x-4">
+                    <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {diaryPartName || 'Parte Diario'}
+                    </h3>
+                    {diaryPartTurno && (
+                      <div className={`px-3 py-1 border rounded ${isDarkMode ? 'bg-blue-900 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-gray-900'}`}>
+                        <p className="text-sm font-semibold">
+                          {diaryPartTurno}
+                        </p>
+                      </div>
+                    )}
+                    {cantPartesAbiertos > 0 && (
+                      <div className={`px-3 py-1 border rounded ${isDarkMode ? 'bg-orange-900 border-orange-700 text-orange-100' : 'bg-orange-50 border-orange-300 text-gray-900'}`}>
+                        <p className="text-sm font-semibold">
+                          Cant Partes: {cantPartesAbiertos}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+                
+                {/* Fila 2, Columna 1: Disciplina, Área y Ubicación */}
+                {(diaryPartDisciplina || diaryPartArea || diaryPartUbicacion) && (
+                  <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                    <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {diaryPartDisciplina && `DISCP: ${diaryPartDisciplina}`}
+                      {diaryPartArea && `, AREA: ${diaryPartArea}`}
+                      {diaryPartUbicacion && `, UBIC: ${diaryPartUbicacion}`}
+                    </p>
+                  </div>
+                )}
+
+                {/* Fila 2, Columna 2: Código y Nombre de Brigada */}
+                {(diaryPartCodBrigada || diaryPartNameBrigada) && (
+                  <div className={`p-3 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                    <p className={`text-sm font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {diaryPartCodBrigada && `CÓDIGO BRIGADA: ${diaryPartCodBrigada}`}
+                      {diaryPartNameBrigada && ` - ${diaryPartNameBrigada}`}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2261,12 +2346,12 @@ export default function Dashboard() {
                     
                     return (
                       <div key={tableKey} className="bg-white rounded-lg border border-gray-300 shadow-sm">
-                        {/* Header de la tabla con botón de colapso */}
-                        <button
-                          onClick={() => toggleProduccionTable(budget.budget_id, pcp.bim_pcp_id)}
-                          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center space-x-2">
+                        {/* Header de la tabla con botón de colapso y filtro */}
+                        <div className="flex items-center justify-between p-4 border-b border-gray-300">
+                          <button
+                            onClick={() => toggleProduccionTable(budget.budget_id, pcp.bim_pcp_id)}
+                            className="flex items-center space-x-2 hover:bg-gray-50 transition-colors flex-1"
+                          >
                             <span className="text-lg">
                               {isCollapsed ? '▶' : '▼'}
                             </span>
@@ -2278,8 +2363,99 @@ export default function Dashboard() {
                                 ⚠️ Sin horas en mano de obra
                               </span>
                             )}
+                          </button>
+                          
+                          {!isCollapsed && (
+                            <button
+                              onClick={() => toggleElementFilter(tableKey)}
+                              className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                              title="Filtrar elementos"
+                            >
+                              <Filter className="h-4 w-4" />
+                              <span>Elementos</span>
+                              {visibleElements[tableKey] && visibleElements[tableKey].size > 0 && (
+                                <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
+                                  {visibleElements[tableKey].size}
+                                </span>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        
+                        {/* Modal de filtrado de elementos */}
+                        {showElementFilter[tableKey] && !isCollapsed && (
+                          <div className="border-b border-gray-300 p-4 bg-gray-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-semibold text-gray-900">Seleccionar elementos a mostrar</h4>
+                              <button
+                                onClick={() => toggleElementFilter(tableKey)}
+                                className="p-1 hover:bg-gray-200 rounded"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            
+                            {/* Barra de búsqueda */}
+                            <div className="mb-3 relative">
+                              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Buscar elemento..."
+                                value={elementSearchTerm[tableKey] || ''}
+                                onChange={(e) => setElementSearchTerm(prev => ({
+                                  ...prev,
+                                  [tableKey]: e.target.value
+                                }))}
+                                className="w-full pl-10 pr-3 py-2 text-sm text-gray-400 border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:text-gray-900"
+                              />
+                            </div>
+                            
+                            {/* Botones de selección rápida */}
+                            <div className="flex space-x-2 mb-3">
+                              <button
+                                onClick={() => {
+                                  const allElementIds = relevantData.flatMap(d => d.elements.map(e => e.bim_element_id));
+                                  selectAllElements(tableKey, allElementIds);
+                                }}
+                                className="px-3 py-1 text-xs text-blue-600 border border-blue-300 rounded hover:bg-blue-50"
+                              >
+                                Seleccionar todos
+                              </button>
+                              <button
+                                onClick={() => deselectAllElements(tableKey)}
+                                className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100"
+                              >
+                                Deseleccionar todos
+                              </button>
+                            </div>
+                            
+                            {/* Lista de elementos */}
+                            <div className="max-h-60 overflow-y-auto space-y-1">
+                              {relevantData.flatMap(d => d.elements.map(el => ({ ...el, interfaceId: d.interfaceId })))
+                                .filter((element, index, self) => 
+                                  self.findIndex(e => e.bim_element_id === element.bim_element_id) === index
+                                )
+                                .filter(element => {
+                                  const searchTerm = (elementSearchTerm[tableKey] || '').toLowerCase();
+                                  return element.bim_element_name.toLowerCase().includes(searchTerm);
+                                })
+                                .map(element => (
+                                  <label
+                                    key={`${element.interfaceId}-${element.bim_element_id}`}
+                                    className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isElementVisible(tableKey, element.bim_element_id)}
+                                      onChange={() => toggleElementVisibility(tableKey, element.bim_element_id)}
+                                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700">{element.bim_element_name}</span>
+                                  </label>
+                                ))}
+                            </div>
                           </div>
-                        </button>
+                        )}
                         
                         {/* Contenido de la tabla (colapsable) */}
                         {!isCollapsed && (
@@ -2306,7 +2482,9 @@ export default function Dashboard() {
                               </thead>
                               <tbody>
                                 {relevantData.map((data, dataIdx) => {
-                                  return data.elements.map((element, elementIdx) => {
+                                  return data.elements
+                                    .filter(element => isElementVisible(tableKey, element.bim_element_id))
+                                    .map((element, elementIdx) => {
                                     const key = `${budget.budget_id}-${data.interfaceId}-${pcp.bim_pcp_id}-${element.bim_element_id}`;
                                     const cantidadValue = produccionData[key] || '';
                                     const odtValue = produccionODT[key] || '';
@@ -2444,11 +2622,15 @@ export default function Dashboard() {
                                             disabled={!hasHorasEnManoObra}
                                             className={`flex-1 px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                           >
-                                            {relevantData.flatMap(d => d.elements).map(el => (
-                                              <option key={el.bim_element_id} value={el.bim_element_id}>
-                                                {el.bim_element_name}
-                                              </option>
-                                            ))}
+                                            {relevantData.flatMap(d => d.elements.map(el => ({ ...el, interfaceId: d.interfaceId })))
+                                              .filter((element, index, self) => 
+                                                self.findIndex(e => e.bim_element_id === element.bim_element_id) === index
+                                              )
+                                              .map(el => (
+                                                <option key={`${el.interfaceId}-${el.bim_element_id}`} value={el.bim_element_id}>
+                                                  {el.bim_element_name}
+                                                </option>
+                                              ))}
                                           </select>
                                           <button
                                             onClick={() => {

@@ -1,8 +1,20 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import LoginForm from '@/components/LoginForm';
+
+function LoginFormWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
+  );
+}
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -25,5 +37,5 @@ export default function Home() {
     return null; // Se redirige en useEffect
   }
 
-  return <LoginForm />;
+  return <LoginFormWrapper />;
 }

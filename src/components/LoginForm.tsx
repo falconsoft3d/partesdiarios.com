@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, Globe, User, Lock, CheckCircle, QrCode, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import QRCode from 'react-qr-code';
@@ -13,6 +14,7 @@ interface LoginFormData {
 
 export default function LoginForm() {
   const { login, isLoading, error, clearError } = useAuth();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState<LoginFormData>({
     url: 'http://localhost:8069',
     username: '',
@@ -20,14 +22,18 @@ export default function LoginForm() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [showServerUrl, setShowServerUrl] = useState(false);
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [rememberMe, setRememberMe] = useState<boolean>(false);
 
-  // Cargar credenciales guardadas al montar el componente
+  // Cargar URL del parámetro de la URL o credenciales guardadas al montar el componente
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
+        // Prioridad 1: URL desde parámetro de la URL
+        const serverUrlParam = searchParams.get('serverUrl');
+        
         const savedUrl = localStorage.getItem('remembered_url');
         const savedUsername = localStorage.getItem('remembered_username');
         const savedPassword = localStorage.getItem('remembered_password');
@@ -35,17 +41,23 @@ export default function LoginForm() {
 
         if (savedRemember === 'true' && savedUrl && savedUsername && savedPassword) {
           setFormData({
-            url: savedUrl,
+            url: serverUrlParam || savedUrl, // Usar parámetro si existe, sino el guardado
             username: savedUsername,
             password: savedPassword
           });
           setRememberMe(true);
+        } else if (serverUrlParam) {
+          // Si no hay credenciales guardadas pero hay parámetro de URL
+          setFormData(prev => ({
+            ...prev,
+            url: serverUrlParam
+          }));
         }
       } catch (error) {
         console.error('Error al cargar credenciales guardadas:', error);
       }
     }
-  }, []);
+  }, [searchParams]);
 
   // Limpiar error global cuando cambie algún campo
   useEffect(() => {
@@ -138,15 +150,13 @@ export default function LoginForm() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <Globe className="w-8 h-8 text-blue-600" />
+            <div 
+              onClick={() => setShowServerUrl(!showServerUrl)}
+              className="mx-auto w-32 h-32 flex items-center justify-center mb-4 cursor-pointer hover:opacity-80 transition-opacity"
+              title="Click para configurar servidor"
+            >
+              <img src="/logo.png" alt="Partes Diarios" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Partes Diarios
-            </h1>
-            <p className="text-gray-600">
-              Conecta con tu servidor
-            </p>
           </div>
 
           {/* Form */}
@@ -165,30 +175,40 @@ export default function LoginForm() {
                 <p className="text-sm text-green-600">{successMessage}</p>
               </div>
             )}
+
             {/* URL Field */}
-            <div>
-              <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
-                URL del Servidor
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Globe className="h-5 w-5 text-gray-400" />
+            {showServerUrl && (
+              <div>
+                <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
+                  URL del Servidor
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Globe className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="url"
+                    type="text"
+                    placeholder="https://ejemplo.com"
+                    value={formData.url}
+                    onChange={(e) => handleInputChange('url', e.target.value)}
+                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg shadow-sm placeholder-gray-900 text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.url ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
                 </div>
-                <input
-                  id="url"
-                  type="text"
-                  placeholder="https://ejemplo.com"
-                  value={formData.url}
-                  onChange={(e) => handleInputChange('url', e.target.value)}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg shadow-sm placeholder-gray-900 text-gray-900 focus:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    errors.url ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                />
+                {errors.url && (
+                  <p className="mt-1 text-sm text-red-600">{errors.url}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowServerUrl(false)}
+                  className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Ocultar configuración
+                </button>
               </div>
-              {errors.url && (
-                <p className="mt-1 text-sm text-red-600">{errors.url}</p>
-              )}
-            </div>
+            )}
 
             {/* Username Field */}
             <div>

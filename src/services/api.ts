@@ -112,6 +112,8 @@ interface DiaryPartsResponse {
   area?: string;
   ubicacion?: string;
   cant_partes_abiertos?: number;
+  cod_brigada?: string;
+  name_brigada?: string;
   pcps?: PCP[];
   employees?: Employee[];
   equipments?: Equipment[];
