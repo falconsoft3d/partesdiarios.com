@@ -370,7 +370,7 @@ class ApiService {
       }> = [];
 
       // Crear las líneas para cada empleado
-      employees.forEach(employee => {
+      employees.forEach((employee, employeeIndex) => {
         const isInasistente = inasistencias?.[employee.hr_employee_id] || false;
         
         // Si está marcado como inasistente, solo enviar UNA línea con el primer presupuesto y primer PCP
@@ -389,7 +389,7 @@ class ApiService {
           // Si NO está marcado como inasistente, enviar todas las líneas con horas > 0
           budgets.forEach(budget => {
             pcps.forEach(pcp => {
-              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
               const hours = pcpData[key] || 0;
               
               if (hours > 0) {

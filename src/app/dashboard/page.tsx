@@ -279,12 +279,22 @@ export default function Dashboard() {
     }
   };
 
-  const handlePcpChange = (employeeId: number, budgetId: number, pcpId: number, value: string) => {
-    const key = `${employeeId}-${budgetId}-${pcpId}`;
+  const handlePcpChange = (employeeId: number, employeeIndex: number, budgetId: number, pcpId: number, value: string) => {
+    const key = `${employeeId}-${employeeIndex}-${budgetId}-${pcpId}`;
+    const numValue = Number(value) || 0;
+    
     setPcpData(prev => ({
       ...prev,
-      [key]: Number(value) || 0
+      [key]: numValue
     }));
+    
+    // Si se agregan horas (valor > 0), desmarcar inasistencia automáticamente
+    if (numValue > 0 && inasistencias[employeeId]) {
+      setInasistencias(prev => ({
+        ...prev,
+        [employeeId]: false
+      }));
+    }
   };
 
   const handleEquipmentChange = (licensePlate: string, budgetId: number, pcpId: number, value: string) => {
@@ -460,7 +470,25 @@ export default function Dashboard() {
     setAttachments(file);
   };
 
-  const handleInasistenciaChange = (employeeId: number, value: boolean) => {
+  const handleInasistenciaChange = (employeeId: number, employeeIndex: number, value: boolean) => {
+    // Si se intenta marcar como inasistente, verificar que no tenga horas asignadas
+    if (value) {
+      let hasHoras = false;
+      budgets.forEach(budget => {
+        pcps.forEach(pcp => {
+          const key = `${employeeId}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+          if (pcpData[key] > 0) {
+            hasHoras = true;
+          }
+        });
+      });
+      
+      if (hasHoras) {
+        alert('❌ No se puede marcar como inasistencia un empleado que tiene horas asignadas. Primero elimine las horas.');
+        return;
+      }
+    }
+    
     setInasistencias(prev => ({
       ...prev,
       [employeeId]: value
@@ -471,11 +499,16 @@ export default function Dashboard() {
     const newValue = !allInasistenciasChecked;
     const newInasistencias: {[key: number]: boolean} = {};
     
-    employees.forEach(employee => {
+    employees.forEach((employee, employeeIndex) => {
       // Verificar si este empleado tiene horas asignadas en algún PCP
-      const hasHoras = Object.keys(pcpData).some(key => {
-        const [empId] = key.split('-');
-        return parseInt(empId) === employee.hr_employee_id && pcpData[key] > 0;
+      let hasHoras = false;
+      budgets.forEach(budget => {
+        pcps.forEach(pcp => {
+          const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+          if (pcpData[key] > 0) {
+            hasHoras = true;
+          }
+        });
       });
       
       // Solo marcar/desmarcar si el empleado NO tiene horas asignadas
@@ -675,12 +708,12 @@ export default function Dashboard() {
         textData += '-'.repeat(150) + '\n';
 
         // Datos de empleados
-        employees.forEach(employee => {
+        employees.forEach((employee, employeeIndex) => {
           textData += `${employee.hr_employee_name}\t`;
           
           budgets.forEach(budget => {
             pcps.forEach(pcp => {
-              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
               const hours = pcpData[key] || 0;
               totalHours += hours;
               textData += `${hours}h\t`;
@@ -733,7 +766,7 @@ export default function Dashboard() {
         };
 
         // Agregar líneas de empleados
-        employees.forEach(employee => {
+        employees.forEach((employee, employeeIndex) => {
           const isInasistente = inasistencias[employee.hr_employee_id] || false;
           
           if (isInasistente) {
@@ -750,7 +783,7 @@ export default function Dashboard() {
           } else {
             budgets.forEach(budget => {
               pcps.forEach(pcp => {
-                const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                 const hours = pcpData[key] || 0;
                 
                 if (hours > 0) {
@@ -1039,7 +1072,8 @@ export default function Dashboard() {
     if (noTrabajoState) return false;
     
     // Validar cada empleado
-    for (const employee of employees) {
+    for (let employeeIndex = 0; employeeIndex < employees.length; employeeIndex++) {
+      const employee = employees[employeeIndex];
       const isInasistente = inasistencias[employee.hr_employee_id] || false;
       
       // Si no está marcado como inasistente, debe tener al menos una hora > 0
@@ -1049,7 +1083,7 @@ export default function Dashboard() {
         // Sumar horas de todas las combinaciones de presupuesto x PCP
         for (const budget of budgets) {
           for (const pcp of pcps) {
-            const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+            const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
             const value = pcpData[key] || 0;
             totalHours += value;
           }
@@ -1077,7 +1111,8 @@ export default function Dashboard() {
       
       if (!noTrabajoState) {
         // Validar cada empleado
-        for (const employee of employees) {
+        for (let employeeIndex = 0; employeeIndex < employees.length; employeeIndex++) {
+          const employee = employees[employeeIndex];
           const isInasistente = inasistencias[employee.hr_employee_id] || false;
           
           // Si no está marcado como inasistente, debe tener al menos una hora > 0
@@ -1087,7 +1122,7 @@ export default function Dashboard() {
             // Sumar horas de todas las combinaciones de presupuesto x PCP
             for (const budget of budgets) {
               for (const pcp of pcps) {
-                const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                 const value = pcpData[key] || 0;
                 totalHours += value;
               }
@@ -1141,14 +1176,14 @@ export default function Dashboard() {
 
       // Calcular KPIs antes de enviar
       let manoObraRows = 0;
-      employees.forEach(employee => {
+      employees.forEach((employee, employeeIndex) => {
         const isInasistente = inasistencias?.[employee.hr_employee_id] || false;
         if (isInasistente) {
           manoObraRows += 1; // Una fila por inasistencia
         } else {
           budgets.forEach(budget => {
             pcps.forEach(pcp => {
-              const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+              const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
               const hours = pcpData[key] || 0;
               if (hours > 0) {
                 manoObraRows += 1;
@@ -1418,7 +1453,9 @@ export default function Dashboard() {
   const pcpHasHorasInManoObra = (budgetId: number, pcpId: number): boolean => {
     // Verificar si hay alguna entrada en pcpData para este PCP en CUALQUIER presupuesto
     const hasHoras = Object.keys(pcpData).some(key => {
-      const [empId, budId, pcpIdStr] = key.split('-');
+      const parts = key.split('-');
+      // Ahora el formato es: empId-empIndex-budId-pcpId
+      const pcpIdStr = parts[3];
       return parseInt(pcpIdStr) === pcpId && pcpData[key] > 0;
     });
     return hasHoras;
@@ -1894,7 +1931,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((employee) => {
+                  {employees.map((employee, employeeIndex) => {
                     // Calcular si esta fila tiene problemas de validación
                     const isInasistente = inasistencias[employee.hr_employee_id] || false;
                     let totalHours = 0;
@@ -1902,7 +1939,7 @@ export default function Dashboard() {
                     // Calcular total de horas sumando todas las combinaciones
                     budgets.forEach(budget => {
                       pcps.forEach(pcp => {
-                        const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                         const value = pcpData[key] || 0;
                         totalHours += value;
                       });
@@ -1912,7 +1949,7 @@ export default function Dashboard() {
                     
                     return (
                       <tr 
-                        key={employee.hr_employee_id} 
+                        key={`${employee.hr_employee_id}-${employeeIndex}`} 
                         className={`${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} ${hasValidationError ? (isDarkMode ? 'bg-red-900 border-l-4 border-l-red-500' : 'bg-red-50 border-l-4 border-l-red-500') : ''}`}
                         title={hasValidationError ? 'Error: Debe tener al menos una hora asignada o marcar como inasistencia' : ''}
                       >
@@ -1926,7 +1963,7 @@ export default function Dashboard() {
                           <input
                             type="checkbox"
                             checked={inasistencias[employee.hr_employee_id] || false}
-                            onChange={(e) => handleInasistenciaChange(employee.hr_employee_id, e.target.checked)}
+                            onChange={(e) => handleInasistenciaChange(employee.hr_employee_id, employeeIndex, e.target.checked)}
                             className={`w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 focus:ring-2 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
                           />
                         </td>
@@ -1938,7 +1975,7 @@ export default function Dashboard() {
                             
                             if (isHidden) return null;
                             
-                            const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                            const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                             
                             return (
                               <td key={key} className={`border px-2 py-3 text-center w-16 ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
@@ -1947,7 +1984,7 @@ export default function Dashboard() {
                                   step="0.5"
                                   min="0"
                                   value={pcpData[key] || ''}
-                                  onChange={(e) => handlePcpChange(employee.hr_employee_id, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                                  onChange={(e) => handlePcpChange(employee.hr_employee_id, employeeIndex, budget.budget_id, pcp.bim_pcp_id, e.target.value)}
                                   className={`w-12 px-1 py-1 border rounded text-sm text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none ${
                                     (pcpData[key] || 0) > 0 
                                       ? (isDarkMode ? 'bg-yellow-900 border-yellow-700 text-yellow-100' : 'bg-yellow-100 border-gray-300 text-gray-900')
@@ -1978,8 +2015,8 @@ export default function Dashboard() {
                         
                         // Calcular el subtotal para esta combinación
                         let subtotal = 0;
-                        employees.forEach(employee => {
-                          const key = `${employee.hr_employee_id}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        employees.forEach((employee, employeeIndex) => {
+                          const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
                           const value = pcpData[key] || 0;
                           subtotal += value;
                         });
@@ -2175,7 +2212,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {equipments.map((equipment, index) => {
+                  {equipments.map((equipment, equipmentIndex) => {
                     let totalHours = 0;
                     budgets.forEach(budget => {
                       pcps.forEach(pcp => {
@@ -2186,7 +2223,7 @@ export default function Dashboard() {
                     });
                     
                     return (
-                      <tr key={equipment.license_plate} className="hover:bg-gray-50">
+                      <tr key={`${equipment.license_plate}-${equipmentIndex}`} className="hover:bg-gray-50">
                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                           {equipment.license_plate}
                         </td>
@@ -2785,7 +2822,6 @@ export default function Dashboard() {
             {/* Contenido de Horas Perdidas */}
             {activeTab === 'horasPerdidas' && (
               <>
-
             {saveError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <div className="flex items-center">
@@ -2795,188 +2831,189 @@ export default function Dashboard() {
               </div>
             )}
             
-            {/* Tabla de Horas Perdidas - Presupuestos */}
+            {/* Opción para mostrar solo lo que se va a reportar */}
+            <div className="mb-4 flex items-center justify-between">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">👁️ Mostrar solo lo que se va a Reportar</span>
+              </label>
+            </div>
+            
+            {/* Tabla de Horas Perdidas - Nuevo Diseño */}
             <div className="overflow-x-auto mb-6">
-              <div className="mb-3 flex items-center justify-end">
-                {hiddenPcpsHorasPerdidasEmpleados.size > 0 && (
-                  <button
-                    onClick={() => showAllPcps('horasPerdidasEmpleados')}
-                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center space-x-1"
-                  >
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    <span>Mostrar {hiddenPcpsHorasPerdidasEmpleados.size} PCP{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''} oculto{hiddenPcpsHorasPerdidasEmpleados.size > 1 ? 's' : ''}</span>
-                  </button>
-                )}
-              </div>
-
-                <table className={`w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-                  <thead>
-                    <tr className={isDarkMode ? 'bg-gray-700' : 'bg-blue-50'}>
-                      <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-4 py-3 text-left text-sm font-medium`}>
-                        Presupuesto
-                      </th>
-                      {pcps.map((pcp, index) => {
-                        // Verificar si hay al menos un presupuesto donde este PCP no esté oculto
-                        const isVisibleInAnyBudget = budgets.some(budget => 
-                          !hiddenPcpsHorasPerdidasEmpleados.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)
-                        );
-                        
-                        if (!isVisibleInAnyBudget) return null;
-                        
-                        return (
-                          <th 
-                            key={`${pcp.bim_pcp_id}-group`} 
-                            className={`border ${isDarkMode ? 'border-gray-600 text-gray-200 bg-gray-600' : 'border-gray-300 text-gray-700 bg-blue-100'} px-2 py-2 text-center text-xs font-medium`} 
-                            colSpan={4}
-                          >
+              <table className={`w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
+                <thead>
+                  <tr className={isDarkMode ? 'bg-gray-700' : 'bg-blue-50'}>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-left text-xs font-medium`}>
+                      Presupuesto
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-left text-xs font-medium`}>
+                      PCP
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-center text-xs font-medium`}>
+                      Reportar
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-center text-xs font-medium`}>
+                      Horas
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-center text-xs font-medium`}>
+                      H Inicio
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-center text-xs font-medium`}>
+                      Personas
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-center text-xs font-medium`}>
+                      HH Perd
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-left text-xs font-medium`}>
+                      Causa
+                    </th>
+                    <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-left text-xs font-medium`}>
+                      Descripcion
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {budgets.map((budget) => {
+                    let isFirstPcpInBudget = true;
+                    return pcps.map((pcp, pcpIndex) => {
+                      const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
+                      const horas = horasPerdidasEmpleadosData[key] || 0;
+                      const horaInicio = horasPerdidasEmpleadosHoraInicio[key] || 8;
+                      
+                      // Calcular cuántos empleados tienen horas asignadas para este presupuesto-PCP
+                      const personas = employees.filter((employee, employeeIndex) => {
+                        const pcpKey = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                        return (pcpData[pcpKey] || 0) > 0;
+                      }).length;
+                      
+                      const hhPerd = horas * personas;
+                      const showBudgetName = isFirstPcpInBudget;
+                      if (isFirstPcpInBudget) isFirstPcpInBudget = false;
+                      
+                      return (
+                        <tr key={key} className={isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-blue-50'}>
+                          {showBudgetName && (
+                            <td 
+                              rowSpan={pcps.length}
+                              className={`border ${isDarkMode ? 'border-gray-600 text-gray-200 bg-gray-800' : 'border-gray-300 text-gray-900 bg-gray-50'} px-3 py-2 text-xs font-bold`}
+                            >
+                              ▶ {budget.budget_name}
+                            </td>
+                          )}
+                          <td className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-xs`}>
                             {pcp.bim_pcp_name}
-                          </th>
-                        );
-                      })}
-                    </tr>
-                    <tr className={isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}>
-                      <th className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}></th>
-                      {pcps.map((pcp) => {
-                        // Verificar si hay al menos un presupuesto donde este PCP no esté oculto
-                        const isVisibleInAnyBudget = budgets.some(budget => 
-                          !hiddenPcpsHorasPerdidasEmpleados.has(`${budget.budget_id}-${pcp.bim_pcp_id}`)
-                        );
-                        
-                        if (!isVisibleInAnyBudget) return null;
-                        
-                        return (
-                          <Fragment key={`${pcp.bim_pcp_id}-headers`}>
-                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium relative group`}>
-                              Horas
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Ocultar este PCP para todos los presupuestos
-                                  budgets.forEach(budget => {
-                                    togglePcpVisibility(budget.budget_id, pcp.bim_pcp_id, 'horasPerdidasEmpleados');
-                                  });
-                                }}
-                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-300 rounded p-0.5"
-                                title="Clic para ocultar este PCP"
-                              >
-                                <svg className="h-3 w-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                </svg>
-                              </button>
-                            </th>
-                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium`}>
-                              Hora Inicio
-                            </th>
-                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium`}>
-                              Causa
-                            </th>
-                            <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-medium`}>
-                              Descripción
-                            </th>
-                          </Fragment>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {budgets.map((budget) => (
-                      <tr key={budget.budget_id} className={isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
-                        <td className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-900'} px-4 py-2 text-sm font-medium`}>
-                          {budget.budget_name}
-                        </td>
-                        {pcps.map((pcp) => {
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2 text-center`}>
+                            <input
+                              type="checkbox"
+                              checked={horas > 0}
+                              readOnly
+                              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                            />
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={horas || ''}
+                              onChange={(e) => handleHorasPerdidasEmpleadosChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                              className={`w-16 px-2 py-1 border rounded text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                isDarkMode 
+                                  ? horas > 0 
+                                    ? 'bg-yellow-900 border-gray-600 text-white' 
+                                    : 'bg-gray-700 border-gray-600 text-white'
+                                  : horas > 0 
+                                    ? 'bg-yellow-100 border-gray-300 text-gray-900' 
+                                    : 'bg-white border-gray-300 text-gray-900'
+                              }`}
+                            />
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                            <input
+                              type="text"
+                              value={horaInicio || ''}
+                              onChange={(e) => handleHorasPerdidasEmpleadosHoraInicioChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                              className={`w-16 px-2 py-1 border rounded text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                isDarkMode 
+                                  ? 'bg-gray-700 border-gray-600 text-white' 
+                                  : 'bg-white border-gray-300 text-gray-900'
+                              }`}
+                            />
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs`}>
+                            {personas}
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-2 py-2 text-center text-xs font-bold`}>
+                            {hhPerd || ''}
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                            <select
+                              value={horasPerdidasEmpleadosCausa[key] || ''}
+                              onChange={(e) => handleHorasPerdidasEmpleadosCausaChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                              className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                isDarkMode 
+                                  ? 'bg-gray-700 border-gray-600 text-white' 
+                                  : 'bg-white border-gray-300 text-gray-900'
+                              }`}
+                            >
+                              <option value="">Seleccionar...</option>
+                              <option value="Falta de Equipo">Falta de Equipo</option>
+                              <option value="Seguridad">Seguridad</option>
+                              <option value="Otros">Otros</option>
+                              <option value="Orden del cliente">Orden del cliente</option>
+                              <option value="Falta de Materiales">Falta de Materiales</option>
+                              <option value="Lluvia">Lluvia</option>
+                              <option value="Inundación">Inundación</option>
+                              <option value="Falta de Andamios">Falta de Andamios</option>
+                              <option value="Alerta Roja">Alerta Roja</option>
+                            </select>
+                          </td>
+                          <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
+                            <input
+                              type="text"
+                              value={horasPerdidasEmpleadosDescripcion[key] || ''}
+                              onChange={(e) => handleHorasPerdidasEmpleadosDescripcionChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
+                              className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                isDarkMode 
+                                  ? 'bg-gray-700 border-gray-600 text-white' 
+                                  : 'bg-white border-gray-300 text-gray-900'
+                              }`}
+                              placeholder="Descripción..."
+                            />
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })}
+                  {/* Fila de Total */}
+                  <tr className={isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}>
+                    <td colSpan={6} className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-900'} px-3 py-2 text-right text-xs font-bold`}>
+                      Total HH Perd
+                    </td>
+                    <td className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-900'} px-2 py-2 text-center text-xs font-bold`}>
+                      {budgets.reduce((total, budget) => {
+                        return total + pcps.reduce((pcpTotal, pcp) => {
                           const key = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                          
-                          // Verificar si hay al menos un presupuesto donde este PCP no esté oculto
-                          const isVisibleInAnyBudget = budgets.some(b => 
-                            !hiddenPcpsHorasPerdidasEmpleados.has(`${b.budget_id}-${pcp.bim_pcp_id}`)
-                          );
-                          
-                          if (!isVisibleInAnyBudget) return null;
-                          
-                          return (
-                            <Fragment key={key}>
-                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.5"
-                                  value={horasPerdidasEmpleadosData[key] || ''}
-                                  onChange={(e) => handleHorasPerdidasEmpleadosChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                  className={`w-24 px-2 py-1 border rounded text-center text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                    isDarkMode 
-                                      ? (horasPerdidasEmpleadosData[key] || 0) > 0 
-                                        ? 'bg-red-900 border-gray-600 text-white' 
-                                        : 'bg-gray-700 border-gray-600 text-white'
-                                      : (horasPerdidasEmpleadosData[key] || 0) > 0 
-                                        ? 'bg-red-100 border-gray-300 text-gray-900' 
-                                        : 'bg-white border-gray-300 text-gray-900'
-                                  }`}
-                                  placeholder=""
-                                />
-                              </td>
-                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="23"
-                                  step="1"
-                                  value={horasPerdidasEmpleadosHoraInicio[key] || 8}
-                                  onChange={(e) => handleHorasPerdidasEmpleadosHoraInicioChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                  className={`w-16 px-2 py-1 border rounded text-center text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                    isDarkMode 
-                                      ? 'bg-gray-700 border-gray-600 text-white' 
-                                      : 'bg-white border-gray-300 text-gray-900'
-                                  }`}
-                                  placeholder="8"
-                                />
-                              </td>
-                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
-                                <select
-                                  value={horasPerdidasEmpleadosCausa[key] || ''}
-                                  onChange={(e) => handleHorasPerdidasEmpleadosCausaChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                  className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                    isDarkMode 
-                                      ? 'bg-gray-700 border-gray-600 text-white' 
-                                      : 'bg-white border-gray-300 text-gray-900'
-                                  }`}
-                                >
-                                  <option value="">Seleccionar...</option>
-                                  <option value="Falta de Equipo">Falta de Equipo</option>
-                                  <option value="Seguridad">Seguridad</option>
-                                  <option value="Otros">Otros</option>
-                                  <option value="Orden del cliente">Orden del cliente</option>
-                                  <option value="Falta de Materiales">Falta de Materiales</option>
-                                  <option value="Lluvia">Lluvia</option>
-                                  <option value="Inundación">Inundación</option>
-                                  <option value="Falta de Andamios">Falta de Andamios</option>
-                                  <option value="Alerta Roja">Alerta Roja</option>
-                                </select>
-                              </td>
-                              <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-2 py-2`}>
-                                <input
-                                  type="text"
-                                  value={horasPerdidasEmpleadosDescripcion[key] || ''}
-                                  onChange={(e) => handleHorasPerdidasEmpleadosDescripcionChange(budget.budget_id, pcp.bim_pcp_id, e.target.value)}
-                                  className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                    isDarkMode 
-                                      ? 'bg-gray-700 border-gray-600 text-white' 
-                                      : 'bg-white border-gray-300 text-gray-900'
-                                  }`}
-                                  placeholder="Descripción..."
-                                />
-                              </td>
-                            </Fragment>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          const horas = horasPerdidasEmpleadosData[key] || 0;
+                          // Calcular cuántos empleados tienen horas asignadas para este presupuesto-PCP
+                          const personas = employees.filter((employee, employeeIndex) => {
+                            const pcpKey = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+                            return (pcpData[pcpKey] || 0) > 0;
+                          }).length;
+                          return pcpTotal + (horas * personas);
+                        }, 0);
+                      }, 0)}
+                    </td>
+                    <td colSpan={2} className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
             {/* Info de presupuestos disponibles */}
             {budgets.length > 0 && (
