@@ -266,27 +266,40 @@ export default function Dashboard() {
 
   // Colapsar todas las tablas de producción por defecto
   useEffect(() => {
-    if (budgets.length > 0) {
+    if (budgets.length > 0 && activeTab === 'produccion') {
       const collapsedKeys = new Set<string>();
+      let tableIndex = 0; // Secuencia numérica simple
       
       budgets.forEach(budget => {
         const bimInterfaces = budget.arr_bim_interface || [];
-        bimInterfaces.forEach(bimInterface => {
-          const interfacePcps = bimInterface.pcps || [];
-          for (let i = 0; i < interfacePcps.length; i++) {
-            const pcpItem = interfacePcps[i];
-            if (pcpItem.bim_pcp_id) {
-              const tableKey = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}`;
-              collapsedKeys.add(tableKey);
-              i++; // Saltar el work_package
+        
+        // Iterar sobre todos los elementos y buscar los que tienen pcps
+        for (let j = 0; j < bimInterfaces.length; j++) {
+          const item = bimInterfaces[j];
+          
+          // Si este item tiene pcps, procesar
+          if (item.pcps && Array.isArray(item.pcps)) {
+            const interfacePcps = item.pcps;
+            
+            for (let i = 0; i < interfacePcps.length; i++) {
+              const pcpItem = interfacePcps[i];
+              if (pcpItem.bim_pcp_id) {
+                const workPackageItem = interfacePcps[i + 1];
+                if (workPackageItem && workPackageItem.elements && workPackageItem.elements.length > 0) {
+                  const tableKey = `tabla-${tableIndex}`;
+                  tableIndex++;
+                  collapsedKeys.add(tableKey);
+                }
+                // NO saltar - procesar todos los elementos
+              }
             }
           }
-        });
+        }
       });
       
       setCollapsedProduccionTables(collapsedKeys);
     }
-  }, [budgets]);
+  }, [budgets, activeTab]);
 
   const handleLoadPart = async () => {
     if (!connection) return;
@@ -489,14 +502,13 @@ export default function Dashboard() {
     }));
   };
 
-  const toggleProduccionTable = (budgetId: number, interfaceId: number, pcpId: number) => {
-    const key = `${budgetId}-${interfaceId}-${pcpId}`;
+  const toggleProduccionTable = (tableKey: string) => {
     setCollapsedProduccionTables(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(key)) {
-        newSet.delete(key);
+      if (newSet.has(tableKey)) {
+        newSet.delete(tableKey);
       } else {
-        newSet.add(key);
+        newSet.add(tableKey);
       }
       return newSet;
     });
@@ -2578,16 +2590,83 @@ export default function Dashboard() {
             {/* Contenido de Producción */}
             {activeTab === 'produccion' && (
               <div className="space-y-4">
-                {budgets.map(budget => {
-                  // Obtener las interfaces BIM para este presupuesto
-                  const bimInterfaces = budget.arr_bim_interface || [];
+                {/* Botones de colapsar/expandir todos */}
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => {
+                      const allKeys = new Set<string>();
+                      let tableIndex = 0; // Secuencia numérica simple
+                      
+                      budgets.forEach(budget => {
+                        const bimInterfaces = budget.arr_bim_interface || [];
+                        
+                        // Iterar sobre todos los elementos y buscar los que tienen pcps
+                        for (let j = 0; j < bimInterfaces.length; j++) {
+                          const item = bimInterfaces[j];
+                          
+                          // Si este item tiene pcps, procesar
+                          if (item.pcps && Array.isArray(item.pcps)) {
+                            const interfacePcps = item.pcps;
+                            
+                            for (let i = 0; i < interfacePcps.length; i++) {
+                              const pcpItem = interfacePcps[i];
+                              if (pcpItem.bim_pcp_id) {
+                                const workPackageItem = interfacePcps[i + 1];
+                                const hasElements = workPackageItem && workPackageItem.elements && workPackageItem.elements.length > 0;
+                                if (hasElements) {
+                                  const tableKey = `tabla-${tableIndex}`;
+                                  tableIndex++;
+                                  allKeys.add(tableKey);
+                                }
+                                // NO saltar - el rendering tampoco lo hace
+                              }
+                            }
+                          }
+                        }
+                      });
+                      setCollapsedProduccionTables(allKeys);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  >
+                    <span>▶</span>
+                    Minimizar Todos
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCollapsedProduccionTables(new Set());
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  >
+                    <span>▼</span>
+                    Expandir Todos
+                  </button>
+                </div>
+                
+                {(() => {
+                  let tableIndex = 0; // Secuencia numérica simple compartida por TODOS los presupuestos
                   
-                  return bimInterfaces.map(bimInterface => {
-                    const interfacePcps = bimInterface.pcps || [];
+                  return budgets.map(budget => {
+                  const bimInterfaces = budget.arr_bim_interface || [];
+                  const allTables = [];
+                  
+                  // Iterar sobre todos los elementos y buscar los que tienen pcps
+                  for (let j = 0; j < bimInterfaces.length; j++) {
+                    const item = bimInterfaces[j];
                     
-                    // Recorrer los PCPs de manera secuencial
-                    // La estructura alterna: [PCP_info, work_package, PCP_info, work_package, ...]
-                    const tables = [];
+                    // Si este item tiene pcps, buscar el interface_info anterior
+                    if (item.pcps && Array.isArray(item.pcps)) {
+                      let interfaceInfo: any = null;
+                      
+                      // Buscar hacia atrás el objeto que tiene bim_interface_id
+                      for (let k = j - 1; k >= 0; k--) {
+                        if (bimInterfaces[k].bim_interface_id !== undefined) {
+                          interfaceInfo = bimInterfaces[k];
+                          break;
+                        }
+                      }
+                      
+                      const interfacePcps = item.pcps;
+                      const tables = [];
                     
                     for (let i = 0; i < interfacePcps.length; i++) {
                       const pcpItem = interfacePcps[i];
@@ -2601,7 +2680,8 @@ export default function Dashboard() {
                         
                         // Si hay work_package con elementos, crear tabla
                         if (workPackageItem && workPackageItem.elements && workPackageItem.elements.length > 0) {
-                          const tableKey = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}`;
+                          const tableKey = `tabla-${tableIndex}`; // Secuencia simple
+                          tableIndex++; // Incrementar para la siguiente tabla
                           const isCollapsed = collapsedProduccionTables.has(tableKey);
                           
                           // Verificar si el PCP tiene horas en mano de obra
@@ -2612,11 +2692,14 @@ export default function Dashboard() {
                               {/* Header de la tabla con botón de colapso y filtro */}
                               <div className="flex items-center justify-between p-4 border-b border-gray-300">
                                 <button
-                                  onClick={() => toggleProduccionTable(budget.budget_id, bimInterface.bim_interface_id, pcpItem.bim_pcp_id)}
+                                  onClick={() => toggleProduccionTable(tableKey)}
                                   className="flex items-center space-x-2 hover:bg-gray-50 transition-colors flex-1"
                                 >
                                   <span className="text-lg">
                                     {isCollapsed ? '▶' : '▼'}
+                                  </span>
+                                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded mr-2">
+                                    #{tableKey.replace('tabla-', '')}
                                   </span>
                                   <h3 className="text-sm font-bold text-gray-900">
                                     Presupuesto {budget.budget_name} + PCP [{pcpItem.bim_pcp_name}] - Paquete: {workPackageItem.work_package_name || ''}
@@ -2702,7 +2785,7 @@ export default function Dashboard() {
                                 })
                                 .map(element => (
                                   <label
-                                    key={`${bimInterface.bim_interface_id}-${element.bim_element_id}`}
+                                    key={`${interfaceInfo?.bim_interface_id || 0}-${element.bim_element_id}`}
                                     className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
                                   >
                                     <input
@@ -2745,7 +2828,7 @@ export default function Dashboard() {
                                 {workPackageItem.elements
                                   .filter(element => isElementVisible(tableKey, element.bim_element_id))
                                   .map((element) => {
-                                    const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}-${element.bim_element_id}`;
+                                    const key = `${budget.budget_id}-${interfaceInfo?.bim_interface_id || 0}-${pcpItem.bim_pcp_id}-${element.bim_element_id}`;
                                     const cantidadValue = produccionData[key] || '';
                                     const odtValue = produccionODT[key] || '';
                                     const desglosaValue = produccionDesglosa[key] || (workBreakdownData.length > 0 ? workBreakdownData[0].work_breakdown_id : '');
@@ -2760,7 +2843,7 @@ export default function Dashboard() {
                                     const estatusValue = estatusLabels[element.execution_status || ''] || element.execution_status || '-';
                                     
                                     return (
-                                      <tr key={`${bimInterface.bim_interface_id}-${element.bim_element_id}`} className="hover:bg-gray-50">
+                                      <tr key={`${interfaceInfo?.bim_interface_id || 0}-${element.bim_element_id}`} className="hover:bg-gray-50">
                                         {/* Columna Elemento */}
                                         <td className="border border-gray-300 p-2 text-xs text-gray-700">
                                           {element.bim_element_name}
@@ -2773,7 +2856,7 @@ export default function Dashboard() {
                                             value={odtValue}
                                             onChange={(e) => handleProduccionODTChange(
                                               budget.budget_id,
-                                              bimInterface.bim_interface_id,
+                                              interfaceInfo?.bim_interface_id || 0,
                                               pcpItem.bim_pcp_id,
                                               element.bim_element_id,
                                               e.target.value
@@ -2791,7 +2874,7 @@ export default function Dashboard() {
                                             value={desglosaValue}
                                             onChange={(e) => handleProduccionDesglosaChange(
                                               budget.budget_id,
-                                              bimInterface.bim_interface_id,
+                                              interfaceInfo?.bim_interface_id || 0,
                                               pcpItem.bim_pcp_id,
                                               element.bim_element_id,
                                               e.target.value
@@ -2826,7 +2909,7 @@ export default function Dashboard() {
                                             value={cantidadValue}
                                             onChange={(e) => handleProduccionChange(
                                               budget.budget_id,
-                                              bimInterface.bim_interface_id,
+                                              interfaceInfo?.bim_interface_id || 0,
                                               pcpItem.bim_pcp_id,
                                               element.bim_element_id,
                                               e.target.value
@@ -2845,7 +2928,7 @@ export default function Dashboard() {
                                   const element = workPackageItem.elements?.find(e => e.bim_element_id === extraRow.elementId);
                                   if (!element) return null;
                                   
-                                  const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}-${extraRow.id}`;
+                                  const key = `${budget.budget_id}-${interfaceInfo?.bim_interface_id || 0}-${pcpItem.bim_pcp_id}-${extraRow.id}`;
                                   const cantidadValue = produccionData[key] || '';
                                   const odtValue = produccionODT[key] || '';
                                   const desglosaValue = produccionDesglosa[key] || (workBreakdownData.length > 0 ? workBreakdownData[0].work_breakdown_id : '');
@@ -2927,7 +3010,7 @@ export default function Dashboard() {
                                           value={odtValue}
                                           onChange={(e) => handleProduccionODTChange(
                                             budget.budget_id,
-                                            bimInterface.bim_interface_id,
+                                            interfaceInfo?.bim_interface_id || 0,
                                             pcpItem.bim_pcp_id,
                                             extraRow.id,
                                             e.target.value
@@ -2945,7 +3028,7 @@ export default function Dashboard() {
                                           value={desglosaValue}
                                           onChange={(e) => handleProduccionDesglosaChange(
                                             budget.budget_id,
-                                            bimInterface.bim_interface_id,
+                                            interfaceInfo?.bim_interface_id || 0,
                                             pcpItem.bim_pcp_id,
                                             extraRow.id,
                                             e.target.value
@@ -2980,7 +3063,7 @@ export default function Dashboard() {
                                           value={cantidadValue}
                                           onChange={(e) => handleProduccionChange(
                                             budget.budget_id,
-                                            bimInterface.bim_interface_id,
+                                            interfaceInfo?.bim_interface_id || 0,
                                             pcpItem.bim_pcp_id,
                                             extraRow.id,
                                             e.target.value
@@ -3034,10 +3117,14 @@ export default function Dashboard() {
                   }
                 }
               }
-            
-            return tables;
-          });
-        })}
+              
+              allTables.push(...tables);
+            }
+          }
+          
+          return allTables;
+        });
+                })()}
       </div>
             )}
 
