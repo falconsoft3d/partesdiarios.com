@@ -170,7 +170,35 @@ export default function Dashboard() {
         attachmentName,
         timestamp: new Date().toISOString()
       };
-      localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
+      
+      try {
+        localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
+      } catch (error: any) {
+        if (error.name === 'QuotaExceededError') {
+          console.warn('⚠️ Límite de localStorage alcanzado, limpiando espacio...');
+          
+          // Primer intento: borrar solo el historial
+          try {
+            localStorage.removeItem('diary_parts_history');
+            localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
+            console.log('✅ Guardado después de limpiar historial');
+            return;
+          } catch (e) {
+            console.warn('⚠️ Aún no hay espacio, borrando todo...');
+          }
+          
+          // Segundo intento: borrar TODO el localStorage
+          try {
+            localStorage.clear();
+            localStorage.setItem('diary_parts_draft', JSON.stringify(localData));
+            console.log('✅ Guardado después de limpiar todo localStorage');
+          } catch (e) {
+            console.error('❌ Error crítico: No se puede guardar ni borrando todo', e);
+          }
+        } else {
+          console.error('❌ Error al guardar en localStorage:', error);
+        }
+      }
     }
   }, [pcps, employees, equipments, allEquipments, budgets, diaryPartId, diaryPartName, diaryPartDate, diaryPartTurno, diaryPartSupervisor, diaryPartFramework, diaryPartResponsable, diaryPartDisciplina, diaryPartArea, diaryPartUbicacion, cantPartesAbiertos, pcpData, equipmentData, horasPerdidasEmpleadosData, horasPerdidasEquiposData, horasPerdidasEmpleadosHoraInicio, horasPerdidasEquiposHoraInicio, horasPerdidasEmpleadosCausa, horasPerdidasEquiposCausa, horasPerdidasEmpleadosDescripcion, horasPerdidasEquiposDescripcion, horasPerdidasTab, produccionData, produccionEstatus, produccionODT, produccionDesglosa, observations, inasistencias, noTrabajoState, attachments]);
 
@@ -238,19 +266,27 @@ export default function Dashboard() {
 
   // Colapsar todas las tablas de producción por defecto
   useEffect(() => {
-    if (pcps.length > 0 && budgets.length > 0) {
+    if (budgets.length > 0) {
       const collapsedKeys = new Set<string>();
       
       budgets.forEach(budget => {
-        pcps.forEach(pcp => {
-          // Colapsar todas las tablas
-          collapsedKeys.add(`${budget.budget_id}-${pcp.bim_pcp_id}`);
+        const bimInterfaces = budget.arr_bim_interface || [];
+        bimInterfaces.forEach(bimInterface => {
+          const interfacePcps = bimInterface.pcps || [];
+          for (let i = 0; i < interfacePcps.length; i++) {
+            const pcpItem = interfacePcps[i];
+            if (pcpItem.bim_pcp_id) {
+              const tableKey = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}`;
+              collapsedKeys.add(tableKey);
+              i++; // Saltar el work_package
+            }
+          }
         });
       });
       
       setCollapsedProduccionTables(collapsedKeys);
     }
-  }, [pcps, budgets]);
+  }, [budgets]);
 
   const handleLoadPart = async () => {
     if (!connection) return;
@@ -309,10 +345,8 @@ export default function Dashboard() {
         setError(null);
         // Los datos se guardarán automáticamente por el useEffect
         
-        // Guardar en el historial que se descargó
-        setTimeout(() => {
-          saveDownloadToHistory();
-        }, 100);
+        // Guardar en el historial que se descargó (pasar directamente los datos del result)
+        saveDownloadToHistory(result);
       } else {
         setError(result.message || 'Error al obtener los partes diarios');
         setShowParts(false);
@@ -455,8 +489,8 @@ export default function Dashboard() {
     }));
   };
 
-  const toggleProduccionTable = (budgetId: number, pcpId: number) => {
-    const key = `${budgetId}-${pcpId}`;
+  const toggleProduccionTable = (budgetId: number, interfaceId: number, pcpId: number) => {
+    const key = `${budgetId}-${interfaceId}-${pcpId}`;
     setCollapsedProduccionTables(prev => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
@@ -706,36 +740,52 @@ export default function Dashboard() {
     }
   };
 
-  const saveDownloadToHistory = () => {
+  const saveDownloadToHistory = (downloadData?: any) => {
     if (typeof window !== 'undefined') {
       try {
+        // Usar datos pasados como parámetro o los del estado
+        const partId = downloadData?.part_id || diaryPartId;
+        const partName = downloadData?.part_name || diaryPartName;
+        const partDate = downloadData?.date || diaryPartDate;
+        const partEmployees = downloadData?.employees || employees;
+        const partPcps = downloadData?.pcps || pcps;
+        const partBudgets = downloadData?.budgets || budgets;
+        const partEquipments = downloadData?.equipments || equipments;
+        const partTurno = downloadData?.turno || diaryPartTurno;
+        const partFramework = downloadData?.framework_contract_id || diaryPartFramework;
+        const partResponsable = downloadData?.responsable || diaryPartResponsable;
+        const partSupervisor = downloadData?.supervisor || diaryPartSupervisor;
+        const partDisciplina = downloadData?.diciplina || diaryPartDisciplina;
+        const partArea = downloadData?.area || diaryPartArea;
+        const partUbicacion = downloadData?.ubicacion || diaryPartUbicacion;
+        
         // Generar el texto formateado
         let textData = `📥 PARTE DESCARGADO
 `;
-        textData += `PARTE DIARIO: ${diaryPartName}\n`;
-        textData += `FECHA: ${diaryPartDate}\n`;
-        textData += `ID: ${diaryPartId}\n`;
+        textData += `PARTE DIARIO: ${partName}\n`;
+        textData += `FECHA: ${partDate}\n`;
+        textData += `ID: ${partId}\n`;
         textData += `ESTADO: BAJADO\n`;
         textData += `DESCARGADO: ${new Date().toLocaleString('es-ES')}\n`;
         textData += `\n${'='.repeat(80)}\n\n`;
         
-        textData += `EMPLEADOS: ${employees.length}\n`;
-        textData += `PRESUPUESTOS: ${budgets.length}\n`;
-        textData += `PCPs: ${pcps.length}\n`;
+        textData += `EMPLEADOS: ${partEmployees.length}\n`;
+        textData += `PRESUPUESTOS: ${partBudgets.length}\n`;
+        textData += `PCPs: ${partPcps.length}\n`;
         textData += `\n${'='.repeat(80)}\n\n`;
         
         textData += 'EMPLEADOS:\n';
-        employees.forEach(employee => {
+        partEmployees.forEach((employee: any) => {
           textData += `- ${employee.hr_employee_name} (ID: ${employee.hr_employee_id})\n`;
         });
         
         textData += '\nPRESUPUESTOS:\n';
-        budgets.forEach(budget => {
+        partBudgets.forEach((budget: any) => {
           textData += `- ${budget.budget_name} (ID: ${budget.budget_id})\n`;
         });
         
         textData += '\nPCPs:\n';
-        pcps.forEach(pcp => {
+        partPcps.forEach((pcp: any) => {
           textData += `- ${pcp.bim_pcp_name} (ID: ${pcp.bim_pcp_id})\n`;
         });
 
@@ -743,15 +793,32 @@ export default function Dashboard() {
         const historyEntry = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           timestamp: new Date().toISOString(),
-          date: diaryPartDate,
-          partName: `📥 ${diaryPartName}`,
-          partId: diaryPartId || 0,
-          employeesCount: employees.length,
-          pcpsCount: pcps.length,
-          budgetsCount: budgets.length,
+          date: partDate,
+          partName: `📥 ${partName}`,
+          partId: partId || 0,
+          employeesCount: partEmployees.length,
+          pcpsCount: partPcps.length,
+          budgetsCount: partBudgets.length,
           totalHours: 0,
           textData,
           action: 'download',
+          activeTab: activeTab,
+          downloadJson: {
+            part_id: partId,
+            date: partDate,
+            part_name: partName,
+            pcps: partPcps,
+            employees: partEmployees,
+            equipments: partEquipments,
+            budgets: partBudgets,
+            turno: partTurno,
+            framework_contract_id: partFramework,
+            responsable: partResponsable,
+            supervisor: partSupervisor,
+            diciplina: partDisciplina,
+            area: partArea,
+            ubicacion: partUbicacion
+          },
           estado: 'BAJADO'
         };
 
@@ -762,13 +829,28 @@ export default function Dashboard() {
         // Agregar nueva entrada al inicio
         history.unshift(historyEntry);
         
-        // Limitar el historial a las últimas 50 entradas
-        const limitedHistory = history.slice(0, 50);
+        // Limitar el historial a las últimas 15 entradas
+        const limitedHistory = history.slice(0, 15);
         
-        // Guardar en localStorage
-        localStorage.setItem('diary_parts_history', JSON.stringify(limitedHistory));
-        
-        console.log('✅ Descarga registrada en el historial');
+        // Guardar en localStorage con manejo de QuotaExceededError
+        try {
+          localStorage.setItem('diary_parts_history', JSON.stringify(limitedHistory));
+          console.log('✅ Descarga registrada en el historial');
+        } catch (storageError: any) {
+          if (storageError.name === 'QuotaExceededError') {
+            console.warn('⚠️ Límite de localStorage alcanzado, limpiando historial antiguo...');
+            // Mantener solo las últimas 5 entradas
+            const miniHistory = history.slice(0, 5);
+            try {
+              localStorage.setItem('diary_parts_history', JSON.stringify(miniHistory));
+              console.log('✅ Historial reducido y guardado');
+            } catch (e) {
+              console.error('❌ No se pudo guardar incluso con historial reducido');
+            }
+          } else {
+            throw storageError;
+          }
+        }
       } catch (error) {
         console.error('Error al guardar descarga en el historial:', error);
       }
@@ -1075,6 +1157,7 @@ export default function Dashboard() {
           totalHours,
           textData,
           action: 'upload',
+          activeTab: activeTab,
           downloadJson: downloadJson,
           uploadJson: uploadJson,
           estado: 'CARGADO'
@@ -1098,16 +1181,31 @@ export default function Dashboard() {
         
         console.log('📚 Historial después de agregar:', history.length, 'entradas');
         
-        // Limitar el historial a las últimas 50 entradas
-        const limitedHistory = history.slice(0, 50);
+        // Limitar el historial a las últimas 15 entradas
+        const limitedHistory = history.slice(0, 15);
         
         console.log('📚 Historial después de limitar:', limitedHistory.length, 'entradas');
         
-        // Guardar en localStorage
-        localStorage.setItem('diary_parts_history', JSON.stringify(limitedHistory));
-        
-        console.log('✅ Entrada guardada en el historial con JSONs completos');
-        console.log('🔍 Verificar en localStorage:', localStorage.getItem('diary_parts_history')?.substring(0, 200));
+        // Guardar en localStorage con manejo de QuotaExceededError
+        try {
+          localStorage.setItem('diary_parts_history', JSON.stringify(limitedHistory));
+          console.log('✅ Entrada guardada en el historial con JSONs completos');
+          console.log('🔍 Verificar en localStorage:', localStorage.getItem('diary_parts_history')?.substring(0, 200));
+        } catch (storageError: any) {
+          if (storageError.name === 'QuotaExceededError') {
+            console.warn('⚠️ Límite de localStorage alcanzado, limpiando historial antiguo...');
+            // Mantener solo las últimas 5 entradas
+            const miniHistory = history.slice(0, 5);
+            try {
+              localStorage.setItem('diary_parts_history', JSON.stringify(miniHistory));
+              console.log('✅ Historial reducido y guardado');
+            } catch (e) {
+              console.error('❌ No se pudo guardar incluso con historial reducido');
+            }
+          } else {
+            throw storageError;
+          }
+        }
       } catch (error) {
         console.error('Error al guardar en el historial:', error);
       }
@@ -2480,89 +2578,57 @@ export default function Dashboard() {
             {/* Contenido de Producción */}
             {activeTab === 'produccion' && (
               <div className="space-y-4">
-                {budgets.map(budget => 
-                  pcps.map(pcp => {
-                    const tableKey = `${budget.budget_id}-${pcp.bim_pcp_id}`;
-                    const isCollapsed = collapsedProduccionTables.has(tableKey);
+                {budgets.map(budget => {
+                  // Obtener las interfaces BIM para este presupuesto
+                  const bimInterfaces = budget.arr_bim_interface || [];
+                  
+                  return bimInterfaces.map(bimInterface => {
+                    const interfacePcps = bimInterface.pcps || [];
                     
-                    // Obtener las interfaces BIM para este presupuesto
-                    const bimInterfaces = budget.arr_bim_interface || [];
+                    // Recorrer los PCPs de manera secuencial
+                    // La estructura alterna: [PCP_info, work_package, PCP_info, work_package, ...]
+                    const tables = [];
                     
-                    // Recopilar datos relevantes: buscar interfaces que tengan PCPs coincidentes y sus elementos
-                    const relevantData: {
-                      interfaceName: string;
-                      interfaceId: number;
-                      elements: BimElement[];
-                      workBreakdown: WorkBreakdown[];
-                      workPackageName: string;
-                    }[] = [];
-                    
-                    bimInterfaces.forEach(bimInterface => {
-                      const interfacePcps = bimInterface.pcps || [];
+                    for (let i = 0; i < interfacePcps.length; i++) {
+                      const pcpItem = interfacePcps[i];
                       
-                      // Buscar si hay un PCP que coincida
-                      let hasPcp = false;
-                      let elementsData: BimElement[] = [];
-                      let workBreakdownData: WorkBreakdown[] = [];
-                      let workPackageNameData = '';
-                      
-                      interfacePcps.forEach(item => {
-                        // Si el item tiene bim_pcp_id y coincide con el PCP actual
-                        if (item.bim_pcp_id === pcp.bim_pcp_id) {
-                          hasPcp = true;
-                          workBreakdownData = item.work_breakdown || [];
-                        }
+                      // Si el item tiene bim_pcp_id, es un PCP
+                      if (pcpItem.bim_pcp_id) {
+                        const workBreakdownData = pcpItem.work_breakdown || [];
                         
-                        // Si el item tiene elements (es el objeto de work_package)
-                        if (item.elements && item.elements.length > 0) {
-                          elementsData = item.elements;
-                          workPackageNameData = item.work_package_name || '';
-                        }
-                      });
-                      
-                      // Si encontramos el PCP y hay elementos, agregar a relevantData
-                      if (hasPcp && elementsData.length > 0) {
-                        relevantData.push({
-                          interfaceName: bimInterface.bim_interface_name || '',
-                          interfaceId: bimInterface.bim_interface_id,
-                          elements: elementsData,
-                          workBreakdown: workBreakdownData,
-                          workPackageName: workPackageNameData
-                        });
-                      }
-                    });
-                    
-                    // Si no hay datos relevantes para este PCP, no mostrar la tabla
-                    if (relevantData.length === 0) return null;
-                    
-                    // Verificar si el PCP tiene horas en mano de obra
-                    const hasHorasEnManoObra = pcpHasHorasInManoObra(budget.budget_id, pcp.bim_pcp_id);
-                    
-                    // Obtener el nombre del paquete de trabajo (es el mismo para toda la tabla)
-                    const workPackageName = relevantData[0]?.workPackageName || '';
-                    
-                    return (
-                      <div key={tableKey} className="bg-white rounded-lg border border-gray-300 shadow-sm">
-                        {/* Header de la tabla con botón de colapso y filtro */}
-                        <div className="flex items-center justify-between p-4 border-b border-gray-300">
-                          <button
-                            onClick={() => toggleProduccionTable(budget.budget_id, pcp.bim_pcp_id)}
-                            className="flex items-center space-x-2 hover:bg-gray-50 transition-colors flex-1"
-                          >
-                            <span className="text-lg">
-                              {isCollapsed ? '▶' : '▼'}
-                            </span>
-                            <h3 className="text-sm font-bold text-gray-900">
-                              Presupuesto {budget.budget_name} + PCP [{pcp.bim_pcp_name}] - Paquete: {workPackageName}
-                            </h3>
-                            {!hasHorasEnManoObra && (
-                              <span className="text-xs text-red-600 font-medium bg-red-50 px-2 py-1 rounded">
-                                ⚠️ Sin horas en mano de obra
-                              </span>
-                            )}
-                          </button>
+                        // El siguiente elemento debe ser el work_package con los elementos
+                        const workPackageItem = interfacePcps[i + 1];
+                        
+                        // Si hay work_package con elementos, crear tabla
+                        if (workPackageItem && workPackageItem.elements && workPackageItem.elements.length > 0) {
+                          const tableKey = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}`;
+                          const isCollapsed = collapsedProduccionTables.has(tableKey);
                           
-                          {!isCollapsed && (
+                          // Verificar si el PCP tiene horas en mano de obra
+                          const hasHorasEnManoObra = pcpHasHorasInManoObra(budget.budget_id, pcpItem.bim_pcp_id);
+                          
+                          tables.push(
+                            <div key={tableKey} className="bg-white rounded-lg border border-gray-300 shadow-sm">
+                              {/* Header de la tabla con botón de colapso y filtro */}
+                              <div className="flex items-center justify-between p-4 border-b border-gray-300">
+                                <button
+                                  onClick={() => toggleProduccionTable(budget.budget_id, bimInterface.bim_interface_id, pcpItem.bim_pcp_id)}
+                                  className="flex items-center space-x-2 hover:bg-gray-50 transition-colors flex-1"
+                                >
+                                  <span className="text-lg">
+                                    {isCollapsed ? '▶' : '▼'}
+                                  </span>
+                                  <h3 className="text-sm font-bold text-gray-900">
+                                    Presupuesto {budget.budget_name} + PCP [{pcpItem.bim_pcp_name}] - Paquete: {workPackageItem.work_package_name || ''}
+                                  </h3>
+                                  {!hasHorasEnManoObra && (
+                                    <span className="text-xs text-red-600 font-medium bg-red-50 px-2 py-1 rounded">
+                                      ⚠️ Sin horas en mano de obra
+                                    </span>
+                                  )}
+                                </button>
+                                
+                                {!isCollapsed && (
                             <button
                               onClick={() => toggleElementFilter(tableKey)}
                               className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -2611,7 +2677,7 @@ export default function Dashboard() {
                             <div className="flex space-x-2 mb-3">
                               <button
                                 onClick={() => {
-                                  const allElementIds = relevantData.flatMap(d => d.elements.map(e => e.bim_element_id));
+                                  const allElementIds = workPackageItem.elements?.map(e => e.bim_element_id) || [];
                                   selectAllElements(tableKey, allElementIds);
                                 }}
                                 className="px-3 py-1 text-xs text-blue-600 border border-blue-300 rounded hover:bg-blue-50"
@@ -2628,10 +2694,7 @@ export default function Dashboard() {
                             
                             {/* Lista de elementos */}
                             <div className="max-h-60 overflow-y-auto space-y-1">
-                              {relevantData.flatMap(d => d.elements.map(el => ({ ...el, interfaceId: d.interfaceId })))
-                                .filter((element, index, self) => 
-                                  self.findIndex(e => e.bim_element_id === element.bim_element_id) === index
-                                )
+                              {workPackageItem.elements
                                 .filter(element => {
                                   if (!element.bim_element_name) return false;
                                   const searchTerm = (elementSearchTerm[tableKey] || '').toLowerCase();
@@ -2639,7 +2702,7 @@ export default function Dashboard() {
                                 })
                                 .map(element => (
                                   <label
-                                    key={`${element.interfaceId}-${element.bim_element_id}`}
+                                    key={`${bimInterface.bim_interface_id}-${element.bim_element_id}`}
                                     className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
                                   >
                                     <input
@@ -2679,14 +2742,13 @@ export default function Dashboard() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {relevantData.map((data, dataIdx) => {
-                                  return data.elements
-                                    .filter(element => isElementVisible(tableKey, element.bim_element_id))
-                                    .map((element, elementIdx) => {
-                                    const key = `${budget.budget_id}-${data.interfaceId}-${pcp.bim_pcp_id}-${element.bim_element_id}`;
+                                {workPackageItem.elements
+                                  .filter(element => isElementVisible(tableKey, element.bim_element_id))
+                                  .map((element) => {
+                                    const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}-${element.bim_element_id}`;
                                     const cantidadValue = produccionData[key] || '';
                                     const odtValue = produccionODT[key] || '';
-                                    const desglosaValue = produccionDesglosa[key] || (data.workBreakdown.length > 0 ? data.workBreakdown[0].work_breakdown_id : '');
+                                    const desglosaValue = produccionDesglosa[key] || (workBreakdownData.length > 0 ? workBreakdownData[0].work_breakdown_id : '');
                                     
                                     // Mapear execution_status a etiquetas en español
                                     const estatusLabels: { [key: string]: string } = {
@@ -2698,7 +2760,7 @@ export default function Dashboard() {
                                     const estatusValue = estatusLabels[element.execution_status || ''] || element.execution_status || '-';
                                     
                                     return (
-                                      <tr key={`${data.interfaceId}-${element.bim_element_id}`} className="hover:bg-gray-50">
+                                      <tr key={`${bimInterface.bim_interface_id}-${element.bim_element_id}`} className="hover:bg-gray-50">
                                         {/* Columna Elemento */}
                                         <td className="border border-gray-300 p-2 text-xs text-gray-700">
                                           {element.bim_element_name}
@@ -2711,8 +2773,8 @@ export default function Dashboard() {
                                             value={odtValue}
                                             onChange={(e) => handleProduccionODTChange(
                                               budget.budget_id,
-                                              data.interfaceId,
-                                              pcp.bim_pcp_id,
+                                              bimInterface.bim_interface_id,
+                                              pcpItem.bim_pcp_id,
                                               element.bim_element_id,
                                               e.target.value
                                             )}
@@ -2729,15 +2791,15 @@ export default function Dashboard() {
                                             value={desglosaValue}
                                             onChange={(e) => handleProduccionDesglosaChange(
                                               budget.budget_id,
-                                              data.interfaceId,
-                                              pcp.bim_pcp_id,
+                                              bimInterface.bim_interface_id,
+                                              pcpItem.bim_pcp_id,
                                               element.bim_element_id,
                                               e.target.value
                                             )}
                                             disabled={!hasHorasEnManoObra}
                                             className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                           >
-                                            {data.workBreakdown.map((wb) => (
+                                            {workBreakdownData.map((wb) => (
                                               <option key={wb.work_breakdown_id} value={wb.work_breakdown_id}>
                                                 {wb.work_breakdown_name}
                                               </option>
@@ -2764,8 +2826,8 @@ export default function Dashboard() {
                                             value={cantidadValue}
                                             onChange={(e) => handleProduccionChange(
                                               budget.budget_id,
-                                              data.interfaceId,
-                                              pcp.bim_pcp_id,
+                                              bimInterface.bim_interface_id,
+                                              pcpItem.bim_pcp_id,
                                               element.bim_element_id,
                                               e.target.value
                                             )}
@@ -2777,20 +2839,16 @@ export default function Dashboard() {
                                         </td>
                                       </tr>
                                     );
-                                  });
-                                })}
+                                  })}
                                 {/* Filas adicionales */}
                                 {(produccionExtraRows[tableKey] || []).map((extraRow, idx) => {
-                                  const element = relevantData.flatMap(d => d.elements).find(e => e.bim_element_id === extraRow.elementId);
+                                  const element = workPackageItem.elements?.find(e => e.bim_element_id === extraRow.elementId);
                                   if (!element) return null;
                                   
-                                  const interfaceData = relevantData.find(d => d.elements.some(e => e.bim_element_id === extraRow.elementId));
-                                  if (!interfaceData) return null;
-                                  
-                                  const key = `${budget.budget_id}-${interfaceData.interfaceId}-${pcp.bim_pcp_id}-${extraRow.id}`;
+                                  const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpItem.bim_pcp_id}-${extraRow.id}`;
                                   const cantidadValue = produccionData[key] || '';
                                   const odtValue = produccionODT[key] || '';
-                                  const desglosaValue = produccionDesglosa[key] || (interfaceData.workBreakdown.length > 0 ? interfaceData.workBreakdown[0].work_breakdown_id : '');
+                                  const desglosaValue = produccionDesglosa[key] || (workBreakdownData.length > 0 ? workBreakdownData[0].work_breakdown_id : '');
                                   
                                   // Mapear execution_status a etiquetas en español
                                   const estatusLabels: { [key: string]: string } = {
@@ -2820,15 +2878,11 @@ export default function Dashboard() {
                                             disabled={!hasHorasEnManoObra}
                                             className={`flex-1 px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                           >
-                                            {relevantData.flatMap(d => d.elements.map(el => ({ ...el, interfaceId: d.interfaceId })))
-                                              .filter((element, index, self) => 
-                                                self.findIndex(e => e.bim_element_id === element.bim_element_id) === index
-                                              )
-                                              .map(el => (
-                                                <option key={`${el.interfaceId}-${el.bim_element_id}`} value={el.bim_element_id}>
-                                                  {el.bim_element_name}
-                                                </option>
-                                              ))}
+                                            {workPackageItem.elements?.map(el => (
+                                              <option key={el.bim_element_id} value={el.bim_element_id}>
+                                                {el.bim_element_name}
+                                              </option>
+                                            ))}
                                           </select>
                                           <button
                                             onClick={() => {
@@ -2873,8 +2927,8 @@ export default function Dashboard() {
                                           value={odtValue}
                                           onChange={(e) => handleProduccionODTChange(
                                             budget.budget_id,
-                                            interfaceData.interfaceId,
-                                            pcp.bim_pcp_id,
+                                            bimInterface.bim_interface_id,
+                                            pcpItem.bim_pcp_id,
                                             extraRow.id,
                                             e.target.value
                                           )}
@@ -2891,15 +2945,15 @@ export default function Dashboard() {
                                           value={desglosaValue}
                                           onChange={(e) => handleProduccionDesglosaChange(
                                             budget.budget_id,
-                                            interfaceData.interfaceId,
-                                            pcp.bim_pcp_id,
+                                            bimInterface.bim_interface_id,
+                                            pcpItem.bim_pcp_id,
                                             extraRow.id,
                                             e.target.value
                                           )}
                                           disabled={!hasHorasEnManoObra}
                                           className={`w-full px-2 py-1 text-xs text-gray-900 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!hasHorasEnManoObra ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                         >
-                                          {interfaceData.workBreakdown.map((wb) => (
+                                          {workBreakdownData.map((wb) => (
                                             <option key={wb.work_breakdown_id} value={wb.work_breakdown_id}>
                                               {wb.work_breakdown_name}
                                             </option>
@@ -2926,8 +2980,8 @@ export default function Dashboard() {
                                           value={cantidadValue}
                                           onChange={(e) => handleProduccionChange(
                                             budget.budget_id,
-                                            interfaceData.interfaceId,
-                                            pcp.bim_pcp_id,
+                                            bimInterface.bim_interface_id,
+                                            pcpItem.bim_pcp_id,
                                             extraRow.id,
                                             e.target.value
                                           )}
@@ -2946,7 +3000,7 @@ export default function Dashboard() {
                             <div className="p-2 border-t border-gray-300 bg-gray-50">
                               <button
                                 onClick={() => {
-                                  const firstElement = relevantData[0]?.elements[0];
+                                  const firstElement = workPackageItem.elements?.[0];
                                   if (firstElement) {
                                     const newRowId = `extra-${Date.now()}-${Math.random()}`;
                                     setProduccionExtraRows(prev => ({
@@ -2974,9 +3028,17 @@ export default function Dashboard() {
                         )}
                       </div>
                     );
-                  })
-                )}
-              </div>
+                    
+                    // Saltar el work_package ya procesado
+                    i++;
+                  }
+                }
+              }
+            
+            return tables;
+          });
+        })}
+      </div>
             )}
 
             {/* Contenido de Horas Perdidas */}
@@ -3209,15 +3271,7 @@ export default function Dashboard() {
           <div className="grid gap-6 md:grid-cols-1 mt-3">
             {/* Cargar Parte Card */}
             <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
-                <Download className="w-8 h-8 text-blue-600" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Cargar Parte
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Descarga y sincroniza los datos del parte diario desde el servidor.
-              </p>
+              
               {error && (
                 <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
                   <div className="flex items-start">
@@ -3242,11 +3296,7 @@ export default function Dashboard() {
               >
                 {loadingParts ? 'Cargando...' : 'Leer Parte'}
               </button>
-              {!loadingParts && (
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  Carga un parte desde el servidor para comenzar
-                </p>
-              )}
+            
             </div>
           </div>
         )}
