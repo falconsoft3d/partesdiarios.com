@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [savingParts, setSavingParts] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [toast, setToast] = useState<{message: string, type: 'error' | 'success'} | null>(null);
   const [noTrabajoState, setNoTrabajoState] = useState<boolean>(false);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [hiddenPcpsManoObra, setHiddenPcpsManoObra] = useState<Set<string>>(new Set());
@@ -1374,8 +1375,22 @@ export default function Dashboard() {
       console.log('Result.status === "ok":', result?.status === 'ok');
       
       if (!result || result.status !== 'ok') {
-        console.error('Error en la respuesta:', result);
-        throw new Error(result?.message || 'Error al guardar el parte diario');
+        const errorDetail = result ? JSON.stringify(result, null, 2) : 'Respuesta vacía del servidor';
+        console.error('❌ Error en la respuesta del servidor:', errorDetail);
+        
+        let errorMessage = '❌ Error al guardar el parte diario\n\n';
+        
+        if (!result) {
+          errorMessage += '🔴 No se recibió respuesta del servidor.\n';
+          errorMessage += 'Verifica tu conexión y que el servidor esté funcionando.';
+        } else if (result.message) {
+          errorMessage += `🔴 ${result.message}`;
+        } else {
+          errorMessage += `🔴 El servidor respondió con estado: "${result.status || 'desconocido'}"\n`;
+          errorMessage += 'Contacta al administrador del sistema.';
+        }
+        
+        throw new Error(errorMessage);
       }
 
       // Crear mensaje con KPIs
@@ -1383,6 +1398,10 @@ export default function Dashboard() {
 
       console.log('✅ Guardado exitoso!');
       setSaveSuccess(kpiMessage);
+      
+      // Mostrar toast de éxito
+      setToast({ message: '✅ Parte subido exitosamente!', type: 'success' });
+      setTimeout(() => setToast(null), 5000);
       
       // Guardar en el historial antes de limpiar
       saveToHistory();
@@ -1435,6 +1454,10 @@ export default function Dashboard() {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido al guardar';
       console.error('Error message:', errorMessage);
       setSaveError(errorMessage);
+      
+      // Mostrar toast de error
+      setToast({ message: errorMessage, type: 'error' });
+      setTimeout(() => setToast(null), 5000); // Ocultar después de 5 segundos
     } finally {
       setSavingParts(false);
     }
@@ -1954,7 +1977,7 @@ export default function Dashboard() {
                 </div>
               )}
               <table className={`w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-                <thead>
+                <thead className="sticky top-0 z-10">
                   {/* Primera fila de cabecera: Presupuestos */}
                   <tr className={isDarkMode ? 'bg-blue-900' : 'bg-blue-50'}>
                     <th className={`border px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'}`} rowSpan={2}>
@@ -2249,7 +2272,7 @@ export default function Dashboard() {
                 </div>
               )}
               <table className="w-full border-collapse border border-gray-300">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className="bg-blue-50">
                     <th className="border border-gray-300 px-2 py-3 text-center text-sm font-medium text-gray-700" rowSpan={2}>
                       
@@ -2636,7 +2659,7 @@ export default function Dashboard() {
                         {!isCollapsed && (
                           <div className="overflow-x-auto">
                             <table className="w-full border-collapse">
-                              <thead>
+                              <thead className="sticky top-0 z-10">
                                 <tr>
                                   <th className="border border-gray-300 p-2 bg-gray-100 text-xs font-semibold text-gray-700 text-left">
                                     Elemento
@@ -2982,7 +3005,7 @@ export default function Dashboard() {
             {/* Tabla de Horas Perdidas - Nuevo Diseño */}
             <div className="overflow-x-auto mb-6">
               <table className={`w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className={isDarkMode ? 'bg-gray-700' : 'bg-blue-50'}>
                     <th className={`border ${isDarkMode ? 'border-gray-600 text-gray-200' : 'border-gray-300 text-gray-700'} px-3 py-2 text-left text-xs font-medium`}>
                       Presupuesto
@@ -3182,108 +3205,63 @@ export default function Dashboard() {
         )}
 
         {/* Main Content - Cards moved to bottom */}
-        <div className="grid gap-6 md:grid-cols-2 mt-3">
-          {/* Cargar Parte Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
-              <Download className="w-8 h-8 text-blue-600" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Cargar Parte
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Descarga y sincroniza los datos del parte diario desde el servidor.
-            </p>
-            {error && (
-              <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-                <div className="flex items-start">
-                  <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h4 className="text-red-800 font-semibold mb-1">Error al cargar parte diario</h4>
-                    <div className="text-red-700 text-sm">
-                      {error.split('\n').map((line, index) => (
-                        <div key={index} className={index > 0 ? 'mt-1' : ''}>
-                          {line}
-                        </div>
-                      ))}
+        {!hasLocalData() && (
+          <div className="grid gap-6 md:grid-cols-1 mt-3">
+            {/* Cargar Parte Card */}
+            <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
+                <Download className="w-8 h-8 text-blue-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                Cargar Parte
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Descarga y sincroniza los datos del parte diario desde el servidor.
+              </p>
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="text-red-800 font-semibold mb-1">Error al cargar parte diario</h4>
+                      <div className="text-red-700 text-sm">
+                        {error.split('\n').map((line, index) => (
+                          <div key={index} className={index > 0 ? 'mt-1' : ''}>
+                            {line}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            <button
-              onClick={handleLoadPart}
-              disabled={loadingParts || hasLocalData()}
-              className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loadingParts ? 'Cargando...' : 'Leer Parte'}
-            </button>
-            {hasLocalData() && (
-              <div className="mt-3">
-                <div className="mb-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-xs text-yellow-800 font-medium">
-                    ⚠️ Ya tienes un parte cargado
-                  </p>
-                  <p className="text-xs text-yellow-700 mt-1">
-                    Súbelo o límpialo para cargar uno nuevo
-                  </p>
-                </div>
-                <button
-                  onClick={handleClearLocalData}
-                  className="w-full flex items-center justify-center space-x-2 bg-red-100 text-red-700 py-2 px-4 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Descartar parte actual</span>
-                </button>
-              </div>
-            )}
-            {!hasLocalData() && !loadingParts && (
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                Carga un parte desde el servidor para comenzar
-              </p>
-            )}
-          </div>
-
-          {/* Reports Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6">
-              <Upload className="w-8 h-8 text-green-600" />
+              )}
+              <button
+                onClick={handleLoadPart}
+                disabled={loadingParts}
+                className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingParts ? 'Cargando...' : 'Leer Parte'}
+              </button>
+              {!loadingParts && (
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Carga un parte desde el servidor para comenzar
+                </p>
+              )}
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Subir Parte
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Guarda y sincroniza los datos modificados del parte diario al servidor.
-            </p>
-            {saveSuccess && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-start">
-                  <svg className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-green-700 text-sm whitespace-pre-line">{saveSuccess}</span>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={handleSaveParts}
-              disabled={savingParts || !hasLocalData()}
-              className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {savingParts ? 'Guardando...' : 'Subir Parte'}
-            </button>
-            {!hasLocalData() && (
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                Primero debes cargar un parte para poder subirlo
-              </p>
-            )}
-            {hasLocalData() && !savingParts && (
-              <p className="text-xs text-green-600 mt-2 text-center">
-                ✓ Parte listo para subir al servidor
-              </p>
-            )}
           </div>
-        </div>
+        )}
+        
+        {hasLocalData() && (
+          <div className="mt-3 text-center">
+            <button
+              onClick={handleClearLocalData}
+              className="inline-flex items-center justify-center space-x-2 bg-red-100 text-red-700 py-3 px-6 rounded-lg text-base font-medium hover:bg-red-200 transition-colors"
+            >
+              <Trash2 className="h-5 w-5" />
+              <span>Descartar parte actual</span>
+            </button>
+          </div>
+        )}
 
         {/* Modal para agregar equipos */}
         {showAddEquipmentModal && (
@@ -3354,6 +3332,43 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
+
+      {/* Toast de notificaciones */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 animate-slide-in-right">
+          <div className={`max-w-md rounded-lg shadow-lg p-4 ${
+            toast.type === 'error' 
+              ? 'bg-red-600 text-white' 
+              : 'bg-green-600 text-white'
+          }`}>
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                {toast.type === 'error' ? (
+                  <AlertCircle className="h-6 w-6" />
+                ) : (
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold mb-1">
+                  {toast.type === 'error' ? 'Error' : 'Éxito'}
+                </div>
+                <div className="text-sm whitespace-pre-line">
+                  {toast.message}
+                </div>
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="flex-shrink-0 ml-2 hover:opacity-75 transition-opacity"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

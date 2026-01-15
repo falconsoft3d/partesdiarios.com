@@ -368,11 +368,22 @@ class ApiService {
         bim_pcp_id: number | false;
         hh: number;
         i: boolean;
+        has_error: boolean;
       }> = [];
 
       // Crear las líneas para cada empleado
       employees.forEach((employee, employeeIndex) => {
         const isInasistente = inasistencias?.[employee.hr_employee_id] || false;
+        
+        // Calcular si el empleado tiene error (no tiene horas asignadas)
+        let totalHours = 0;
+        budgets.forEach(budget => {
+          pcps.forEach(pcp => {
+            const key = `${employee.hr_employee_id}-${employeeIndex}-${budget.budget_id}-${pcp.bim_pcp_id}`;
+            totalHours += pcpData[key] || 0;
+          });
+        });
+        const hasError = !isInasistente && totalHours === 0;
         
         // Si está marcado como inasistente, solo enviar UNA línea con el primer presupuesto y primer PCP
         if (isInasistente) {
@@ -383,7 +394,8 @@ class ApiService {
               budget_id: budgets[0].budget_id,
               bim_pcp_id: pcps[0].bim_pcp_id,
               hh: 0,
-              i: true
+              i: true,
+              has_error: false
             });
           }
         } else {
@@ -400,12 +412,43 @@ class ApiService {
                   budget_id: budget.budget_id,
                   bim_pcp_id: pcp.bim_pcp_id,
                   hh: hours,
-                  i: false
+                  i: false,
+                  has_error: false
                 });
               }
             });
           });
+          
+          // Si no tiene horas pero no está marcado como inasistente, enviar una línea con error
+          if (hasError && budgets.length > 0 && pcps.length > 0) {
+            employeeLines.push({
+              hr_employee_id: employee.hr_employee_id,
+              bim_resource_id: false,
+              budget_id: budgets[0].budget_id,
+              bim_pcp_id: pcps[0].bim_pcp_id,
+              hh: 0,
+              i: false,
+              has_error: true
+            });
+          }
         }
+      });
+
+      console.log('🔍 Employee lines generadas:', {
+        total: employeeLines.length,
+        conError: employeeLines.filter(l => l.has_error).length,
+        conInasistencia: employeeLines.filter(l => l.i).length,
+        conHoras: employeeLines.filter(l => l.hh > 0).length
+      });
+      
+      // Log de cada línea con error
+      employeeLines.filter(l => l.has_error).forEach(line => {
+        console.log('❌ Línea con error:', {
+          employee_id: line.hr_employee_id,
+          has_error: line.has_error,
+          i: line.i,
+          hh: line.hh
+        });
       });
 
       // Preparar los datos del parte diario
@@ -419,6 +462,7 @@ class ApiService {
           bim_pcp_id: number | false;
           hh: number;
           i: boolean;
+          has_error: boolean;
         }>;
         file?: {name: string, data: string};
         state?: string;

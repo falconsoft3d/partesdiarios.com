@@ -348,6 +348,40 @@ class DiaryPartPwa(http.Controller):
         if not diary_part:
             return {'status': 'error', 'message': 'No se encontró el parte'}
 
+        # Validar que las filas con error estén marcadas con I o que esté marcado NO trabajo
+        state = diary_part_data.get('state', False)
+        _logger.info(f"🔍 Estado del parte: {state}")
+        
+        if state != 'dont_work':
+            employee_lines = diary_part_data.get('employee_lines_ids', [])
+            _logger.info(f"🔍 Total de líneas de empleados recibidas: {len(employee_lines)}")
+            
+            errores_sin_marcar = []
+            
+            for idx, line_data in enumerate(employee_lines):
+                tiene_error = line_data.get('has_error', False)
+                tiene_inasistencia = line_data.get('i', False)
+                hr_employee_id = line_data.get('hr_employee_id')
+                hh = line_data.get('hh', 0)
+                
+                _logger.info(f"🔍 Línea {idx}: empleado_id={hr_employee_id}, hh={hh}, has_error={tiene_error}, i={tiene_inasistencia}")
+                
+                if tiene_error and not tiene_inasistencia and hr_employee_id:
+                    # Buscar el nombre del empleado
+                    employee = request.env['hr.employee'].sudo().browse(hr_employee_id)
+                    if employee:
+                        _logger.info(f"❌ Empleado con error sin marcar: {employee.name}")
+                        errores_sin_marcar.append(employee.name)
+            
+            if errores_sin_marcar:
+                empleados_texto = ', '.join(errores_sin_marcar)
+                _logger.info(f"❌ Empleados con errores sin marcar: {empleados_texto}")
+                return {
+                    'status': 'error', 
+                    'message': f'Los siguientes empleados tienen errores y deben marcarse como inasistencia (I) o marcar "NO trabajo": {empleados_texto}'
+                }
+            else:
+                _logger.info("✅ No se encontraron empleados con errores sin marcar")
 
         # Limpiar las líneas actuales de empleados
         diary_part.sudo().employee_lines_ids.unlink()
