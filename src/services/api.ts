@@ -535,23 +535,42 @@ class ApiService {
         const workPackageMap: {[key: string]: {id: number, name: string}} = {};
         
         budgets.forEach(budget => {
-          budget.arr_bim_interface?.forEach((bimInterface: any) => {
-            const pcpsArray = bimInterface.pcps || [];
-            pcpsArray.forEach((pcpOrPackage: any, index: number) => {
-              if (pcpOrPackage.work_breakdown && pcpOrPackage.work_breakdown.length > 0) {
-                const pcpId = pcpOrPackage.bim_pcp_id;
-                const defaultWB = pcpOrPackage.work_breakdown[0].work_breakdown_id;
+          const bimInterfaces = budget.arr_bim_interface || [];
+          
+          // Iterar sobre todos los elementos y buscar los que tienen pcps
+          for (let j = 0; j < bimInterfaces.length; j++) {
+            const item = bimInterfaces[j];
+            
+            // Si este item tiene pcps, buscar el interface_info anterior
+            if (item.pcps && Array.isArray(item.pcps)) {
+              let interfaceInfo: any = null;
+              
+              // Buscar hacia atrás el objeto que tiene bim_interface_id
+              for (let k = j - 1; k >= 0; k--) {
+                if (bimInterfaces[k].bim_interface_id !== undefined) {
+                  interfaceInfo = bimInterfaces[k];
+                  break;
+                }
+              }
+              
+              const pcpsArray = item.pcps;
+              
+              for (let i = 0; i < pcpsArray.length; i++) {
+                const pcpOrPackage = pcpsArray[i];
                 
-                // El work_package es el siguiente item en el array
-                const nextIndex = index + 1;
-                if (nextIndex < pcpsArray.length) {
-                  const workPackage = pcpsArray[nextIndex];
-                  const workPackageId = workPackage.work_package_id;
-                  const workPackageName = workPackage.work_package_name;
+                // Si tiene bim_pcp_id y work_breakdown, es un PCP
+                if (pcpOrPackage.bim_pcp_id && pcpOrPackage.work_breakdown && pcpOrPackage.work_breakdown.length > 0) {
+                  const pcpId = pcpOrPackage.bim_pcp_id;
+                  const defaultWB = pcpOrPackage.work_breakdown[0].work_breakdown_id;
                   
-                  if (workPackage.elements) {
-                    workPackage.elements.forEach((element: any) => {
-                      const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpId}-${element.bim_element_id}`;
+                  // El work_package es el siguiente item en el array
+                  const workPackageItem = pcpsArray[i + 1];
+                  if (workPackageItem && workPackageItem.elements && workPackageItem.elements.length > 0) {
+                    const workPackageId = workPackageItem.work_package_id;
+                    const workPackageName = workPackageItem.work_package_name;
+                    
+                    workPackageItem.elements.forEach((element: any) => {
+                      const key = `${budget.budget_id}-${interfaceInfo?.bim_interface_id || 0}-${pcpId}-${element.bim_element_id}`;
                       defaultWorkBreakdown[key] = defaultWB;
                       if (workPackageId && workPackageName) {
                         workPackageMap[key] = {id: workPackageId, name: workPackageName};
@@ -560,8 +579,8 @@ class ApiService {
                   }
                 }
               }
-            });
-          });
+            }
+          }
         });
 
         console.log('🔍 API - defaultWorkBreakdown creado:', defaultWorkBreakdown);

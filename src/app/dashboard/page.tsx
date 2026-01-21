@@ -1022,27 +1022,47 @@ export default function Dashboard() {
         // Crear un mapa de valores por defecto de desglose
         const defaultWorkBreakdown: {[key: string]: number} = {};
         budgets.forEach(budget => {
-          budget.arr_bim_interface?.forEach((bimInterface: any) => {
-            const pcpsArray = bimInterface.pcps || [];
-            pcpsArray.forEach((pcpOrPackage: any) => {
-              // Puede ser un PCP (con work_breakdown) o un work_package (con elements)
-              if (pcpOrPackage.work_breakdown && pcpOrPackage.work_breakdown.length > 0) {
-                // Es un PCP con work_breakdown
-                const pcpId = pcpOrPackage.bim_pcp_id;
-                const defaultWB = pcpOrPackage.work_breakdown[0].work_breakdown_id;
-                
-                // Ahora buscar los elementos en el siguiente item del array (work_package)
-                const nextIndex = pcpsArray.indexOf(pcpOrPackage) + 1;
-                if (nextIndex < pcpsArray.length && pcpsArray[nextIndex].elements) {
-                  const workPackage = pcpsArray[nextIndex];
-                  workPackage.elements.forEach((element: any) => {
-                    const key = `${budget.budget_id}-${bimInterface.bim_interface_id}-${pcpId}-${element.bim_element_id}`;
-                    defaultWorkBreakdown[key] = defaultWB;
-                  });
+          const bimInterfaces = budget.arr_bim_interface || [];
+          
+          // Iterar sobre todos los elementos y buscar los que tienen pcps
+          for (let j = 0; j < bimInterfaces.length; j++) {
+            const item = bimInterfaces[j];
+            
+            // Si este item tiene pcps, buscar el interface_info anterior
+            if (item.pcps && Array.isArray(item.pcps)) {
+              let interfaceInfo: any = null;
+              
+              // Buscar hacia atrás el objeto que tiene bim_interface_id
+              for (let k = j - 1; k >= 0; k--) {
+                if (bimInterfaces[k].bim_interface_id !== undefined) {
+                  interfaceInfo = bimInterfaces[k];
+                  break;
                 }
               }
-            });
-          });
+              
+              const pcpsArray = item.pcps;
+              
+              for (let i = 0; i < pcpsArray.length; i++) {
+                const pcpOrPackage = pcpsArray[i];
+                
+                // Puede ser un PCP (con work_breakdown) o un work_package (con elements)
+                if (pcpOrPackage.bim_pcp_id && pcpOrPackage.work_breakdown && pcpOrPackage.work_breakdown.length > 0) {
+                  // Es un PCP con work_breakdown
+                  const pcpId = pcpOrPackage.bim_pcp_id;
+                  const defaultWB = pcpOrPackage.work_breakdown[0].work_breakdown_id;
+                  
+                  // El siguiente elemento debe ser el work_package con los elementos
+                  const workPackageItem = pcpsArray[i + 1];
+                  if (workPackageItem && workPackageItem.elements && workPackageItem.elements.length > 0) {
+                    workPackageItem.elements.forEach((element: any) => {
+                      const key = `${budget.budget_id}-${interfaceInfo?.bim_interface_id || 0}-${pcpId}-${element.bim_element_id}`;
+                      defaultWorkBreakdown[key] = defaultWB;
+                    });
+                  }
+                }
+              }
+            }
+          }
         });
         
         console.log('🔍 DEBUG defaultWorkBreakdown:', defaultWorkBreakdown);
@@ -1807,6 +1827,15 @@ export default function Dashboard() {
               >
                 <Upload className="h-5 w-5" />
                 <span>SUBIR</span>
+              </button>
+              <button
+                onClick={handleClearLocalData}
+                disabled={!hasLocalData()}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-100 text-red-700 font-semibold rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
+                title="Descartar parte actual"
+              >
+                <Trash2 className="h-5 w-5" />
+                <span>DESCARTAR</span>
               </button>
               <button
                 onClick={() => window.location.href = '/help'}
@@ -3388,17 +3417,7 @@ export default function Dashboard() {
           </div>
         )}
         
-        {hasLocalData() && (
-          <div className="mt-3 text-center">
-            <button
-              onClick={handleClearLocalData}
-              className="inline-flex items-center justify-center space-x-2 bg-red-100 text-red-700 py-3 px-6 rounded-lg text-base font-medium hover:bg-red-200 transition-colors"
-            >
-              <Trash2 className="h-5 w-5" />
-              <span>Descartar parte actual</span>
-            </button>
-          </div>
-        )}
+
 
         {/* Modal para agregar equipos */}
         {showAddEquipmentModal && (
